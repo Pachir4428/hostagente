@@ -20,8 +20,8 @@ ssh root@SEU_IP_DA_VPS
 
 ```bash
 # Clonar repositório
-git clone https://github.com/Pachir4428/hostagent1.git
-cd hostagent1
+git clone https://github.com/Pachir4428/hostagent.git
+cd hostagent
 
 # Executar setup (instala Docker, Node, Firewall, etc)
 bash scripts/setup-vps.sh
