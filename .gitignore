@@ -1,14 +1,37 @@
 node_modules/
 dist/
+build/
 .env
+.env.local
+.env.*.local
 *.env.local
 .DS_Store
+Thumbs.db
 *.log
+npm-debug.log*
 
-# Next.js build output — regenerado a cada build, não entra no repo
+# Next.js build output
 .next/
+out/
 apps/web/.next/
 apps/web/tsconfig.tsbuildinfo
 
 # TypeScript build info
 *.tsbuildinfo
+
+# Uploads
+apps/api/uploads/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Coverage
+coverage/
+
+# Prisma generated
+apps/api/node_modules/.prisma/
+
+# Claude Code internal
+.claude/
