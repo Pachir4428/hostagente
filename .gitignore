@@ -32,3 +32,6 @@ coverage/
 
 # Prisma generated
 apps/api/node_modules/.prisma/
+
+# Claude Code internal
+.claude/
