@@ -1,0 +1,92 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: bothosting
+      POSTGRES_USER: postgres
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      target: dev
+    ports: ["3000:3000"]
+    env_file: ./apps/api/.env.example
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/bothosting
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: development
+    volumes:
+      - ./apps/api/src:/app/src
+      - ./apps/api/prisma:/app/prisma
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [bot-network]
+
+  bot-runner:
+    build: ./apps/bot-runner
+    ports: ["4001:4001"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./apps/bot-runner/src:/app/src
+    env_file: ./apps/bot-runner/.env.example
+    environment:
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: development
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [bot-network]
+
+  worker:
+    build: ./apps/worker
+    env_file: ./apps/worker/.env.example
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/bothosting
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: development
+    volumes:
+      - ./apps/worker/src:/app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [bot-network]
+
+  web:
+    build: ./apps/web
+    ports: ["3001:3001"]
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+      NODE_ENV: development
+    volumes:
+      - ./apps/web/src:/app/src
+    depends_on: [api]
+    networks: [bot-network]
+
+networks:
+  bot-network:
+    driver: bridge
+
+volumes:
+  pgdata:

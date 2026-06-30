@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+*.env.local
+.DS_Store
+*.log
+
+# Next.js build output — regenerado a cada build, não entra no repo
+.next/
+apps/web/.next/
+apps/web/tsconfig.tsbuildinfo
+
+# TypeScript build info
+*.tsbuildinfo

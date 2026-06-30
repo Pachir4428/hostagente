@@ -1,0 +1,373 @@
+# Guia de Deploy — Bot Hosting Platform
+
+---
+
+## ATENÇÃO
+
+Todos os comandos são executados **na VPS via SSH** (Linux/Ubuntu).  
+Não execute no Windows CMD ou PowerShell.
+
+---
+
+## Requisitos da VPS
+
+| Recurso | Mínimo     | Recomendado    |
+|---------|------------|----------------|
+| CPU     | 2 vCPU     | 4 vCPU         |
+| RAM     | 4 GB       | 8 GB           |
+| Disco   | 40 GB SSD  | 80 GB SSD      |
+| SO      | Ubuntu 22.04 ou 24.04 LTS    |
+
+---
+
+## Deploy Rápido (num único script)
+
+```bash
+# 1. Ligar à VPS
+ssh root@SEU_IP
+
+# 2. Clonar o repositório
+git clone https://github.com/Pachir4428/hostagent1.git
+cd hostagent1
+
+# 3. Executar setup completo (instala Docker, nano, vim, Node, firewall)
+bash scripts/setup-vps.sh
+
+# 4. Configurar variáveis de ambiente
+cp .env.example .env
+nano .env       # editar senhas e secrets
+
+# 5. Build e deploy
+bash scripts/deploy.sh
+```
+
+Após o deploy:
+- **API:**      http://SEU_IP:3000
+- **Frontend:** http://SEU_IP:3001
+- **Health:**   http://SEU_IP:3000/health
+
+---
+
+## Passo a Passo Manual
+
+### 1 — Instalar dependências
+
+```bash
+apt update
+apt install -y docker.io docker-compose-v2 git nano vim curl openssl
+systemctl enable --now docker
+docker network create bot-network
+```
+
+### 2 — Clonar e configurar
+
+```bash
+git clone https://github.com/Pachir4428/hostagent1.git
+cd hostagent1
+cp .env.example .env
+nano .env
+```
+
+Gerar secrets seguros:
+```bash
+openssl rand -hex 32   # executar 3 vezes para JWT_SECRET, JWT_REFRESH_SECRET, INTERNAL_SECRET
+```
+
+Preencher o `.env`:
+```env
+POSTGRES_PASSWORD=UmaPasswordForte123!
+REDIS_PASSWORD=OutraPassword456!
+JWT_SECRET=resultado_do_openssl
+JWT_REFRESH_SECRET=outro_resultado_openssl
+INTERNAL_SECRET=mais_um_resultado_openssl
+FRONTEND_URL=http://localhost:3001
+FRONTEND_API_URL=http://localhost:3000
+APP_VERSION=1.0.0
+
+# Cookies de autenticação
+COOKIE_SECURE=false        # true em produção com HTTPS
+COOKIE_SAMESITE=lax
+
+# Segredos de webhook (obrigatórios em produção)
+MPESA_WEBHOOK_SECRET=resultado_do_openssl
+EMOLA_WEBHOOK_SECRET=resultado_do_openssl
+MKESH_WEBHOOK_SECRET=resultado_do_openssl
+```
+
+> **Sem domínio?** Deixe `FRONTEND_URL=http://localhost:3001` e `COOKIE_SECURE=false`.  
+> **Com domínio + HTTPS?** Use `FRONTEND_URL=https://seudominio.com` e `COOKIE_SECURE=true` — obrigatório para as cookies de autenticação funcionarem.
+
+### 3 — Build das imagens
+
+```bash
+docker build -t bot-platform-api:latest    ./apps/api
+docker build -t bot-platform-runner:latest ./apps/bot-runner
+docker build -t bot-platform-worker:latest ./apps/worker
+docker build -t bot-engine:latest          ./apps/bot-engine
+docker build -t bot-platform-web:latest    ./apps/web
+```
+
+### 4 — Iniciar serviços
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### 5 — Migrações da base de dados
+
+```bash
+# Aguardar o postgres iniciar (~10s) e depois:
+source .env
+docker run --rm \
+  --network bot-network \
+  -e DATABASE_URL="postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting" \
+  bot-platform-api:latest \
+  sh -c "npx prisma migrate deploy --schema=./prisma/schema.prisma"
+```
+
+### 6 — Verificar
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+curl http://localhost:3000/health
+```
+
+---
+
+## VPS com 2GB RAM — Análise e Solução
+
+### Por que o compose completo não cabe em 2GB
+
+| Serviço | RSS idle | RSS pico |
+|---------|----------|---------|
+| OS + Docker daemon | — | ~350 MB |
+| postgres | 30 MB | 100 MB |
+| redis | 5 MB | 30 MB |
+| api (NestJS) | 120 MB | 250 MB |
+| web (Next.js) | 150 MB | 280 MB |
+| bot-runner | 80 MB | 180 MB |
+| worker | 80 MB | 200 MB |
+| **Total completo** | **~815 MB** | **~1 390 MB** |
+
+O total máximo é ~1,4 GB mas os **picos de startup** (NestJS a carregar todos os módulos em simultâneo) podem passar de 2 GB temporariamente e causar OOM.
+
+> **`deploy.resources.limits.memory` no docker-compose.prod.yml é ignorado** pelo `docker compose` fora do modo Swarm. Só `mem_limit` ao nível do serviço é respeitado.
+
+---
+
+### Solução: usar `docker-compose.small.yml`
+
+Este ficheiro usa `mem_limit` real, limita postgres e redis, e não inclui `bot-runner` nem `worker`:
+
+```bash
+# 1. Criar swap de 2 GB (obrigatório — cobre picos de startup)
+fallocate -l 2G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+sysctl vm.swappiness=10
+
+# 2. Deploy dos serviços essenciais
+docker compose -f docker-compose.small.yml up -d
+```
+
+**Orçamento de memória do `docker-compose.small.yml`:**
+
+| Serviço | `mem_limit` | RSS real idle |
+|---------|------------|---------------|
+| postgres | 150 MB | ~40 MB |
+| redis | 64 MB | ~10 MB |
+| api | 280 MB | ~130 MB |
+| web | 300 MB | ~160 MB |
+| OS + Docker | — | ~350 MB |
+| **Total** | **794 MB** | **~690 MB** |
+
+Com 2 GB de swap, os picos de arranque são absorvidos sem OOM.
+
+---
+
+### Adicionar bot-runner e worker depois
+
+Só activar quando `docker stats` mostrar RAM disponível:
+
+```bash
+# Ver uso em tempo real
+docker stats --no-stream
+
+# Adicionar bot-runner (orquestrador de containers WhatsApp)
+docker compose -f docker-compose.prod.yml up -d bot-runner
+
+# Adicionar worker (processamento de mensagens / IA)
+docker compose -f docker-compose.prod.yml up -d worker
+```
+
+---
+
+### Monitorização
+
+```bash
+docker stats
+docker compose -f docker-compose.small.yml ps
+docker compose -f docker-compose.small.yml logs -f api
+```
+
+
+---
+
+## Comandos do Dia-a-Dia
+
+```bash
+# Estado dos serviços
+docker compose -f docker-compose.prod.yml ps
+
+# Logs em tempo real
+docker compose -f docker-compose.prod.yml logs -f api
+docker compose -f docker-compose.prod.yml logs -f worker
+docker compose -f docker-compose.prod.yml logs -f bot-runner
+
+# Reiniciar um serviço
+docker compose -f docker-compose.prod.yml restart api
+
+# Parar tudo
+docker compose -f docker-compose.prod.yml down
+
+# Uso de recursos
+docker stats
+```
+
+---
+
+## Atualizar após novo push no GitHub
+
+```bash
+cd hostagent1
+git pull
+docker build -t bot-platform-api:latest ./apps/api
+docker compose -f docker-compose.prod.yml up -d --no-deps api
+```
+
+---
+
+## Resolução de Problemas
+
+**`nano: command not found`**
+```bash
+apt install -y nano
+```
+
+**`npm: command not found`** (na VPS, fora do container)
+```bash
+apt install -y nodejs npm
+# OU via nodesource:
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt install -y nodejs
+```
+
+**`docker-compose: command not found`**
+```bash
+apt install -y docker-compose-v2
+# Usar sempre: docker compose (com espaço, sem hífen)
+```
+
+**`npm ci` error / package-lock.json missing**
+```bash
+# Já corrigido nos Dockerfiles (usa npm install)
+# Se persistir: git pull e rebuildar
+```
+
+**API não responde no health check**
+```bash
+docker compose -f docker-compose.prod.yml logs api --tail=50
+```
+
+**Erro de migrações**
+```bash
+# Verificar se o postgres está a correr
+docker compose -f docker-compose.prod.yml ps postgres
+# Tentar novamente a migração
+source .env
+docker run --rm --network bot-network \
+  -e DATABASE_URL="postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting" \
+  bot-platform-api:latest \
+  sh -c "npx prisma migrate deploy --schema=./prisma/schema.prisma"
+```
+
+**Erro `tzdata` durante apt upgrade (Ubuntu 24.04)**
+```bash
+export DEBIAN_FRONTEND=noninteractive
+ln -fs /usr/share/zoneinfo/Africa/Maputo /etc/localtime
+echo "Africa/Maputo" > /etc/timezone
+apt install --reinstall -y tzdata
+dpkg --configure -a
+```
+
+---
+
+## Com Domínio + SSL (Opcional)
+
+```bash
+apt install -y nginx certbot python3-certbot-nginx
+nano /etc/nginx/sites-available/bot-platform
+```
+
+Conteúdo do ficheiro nginx (substituir `seudominio.com`):
+
+```nginx
+server {
+    listen 80;
+    server_name seudominio.com www.seudominio.com;
+
+    location / {
+        proxy_pass http://localhost:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /api/ {
+        proxy_pass http://localhost:3000/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /socket.io/ {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection upgrade;
+    }
+}
+```
+
+```bash
+ln -s /etc/nginx/sites-available/bot-platform /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+certbot --nginx -d seudominio.com --non-interactive --agree-tos --email teu@email.com
+```
+
+> **Importante após activar HTTPS:** edite o `.env` e defina:
+> ```env
+> FRONTEND_URL=https://seudominio.com
+> COOKIE_SECURE=true
+> ```
+> Sem `COOKIE_SECURE=true`, o browser rejeita os cookies de autenticação em HTTPS.
+
+---
+
+## Arquitetura
+
+```
+Internet
+   │
+   ▼
+[Nginx :80/:443]  ← SSL via Certbot (opcional, só com domínio)
+   ├── Frontend Next.js  :3001
+   └── API NestJS        :3000
+           ├── PostgreSQL    (interno)
+           └── Redis         (interno)
+                ├── Worker BullMQ
+                └── Bot Runner → containers isolados por bot
+```

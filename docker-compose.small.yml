@@ -1,0 +1,129 @@
+version: '3.9'
+
+# ─────────────────────────────────────────────────────────────
+#  Compose para VPS com 2GB RAM
+#  Inclui apenas os serviços essenciais: postgres, redis, api, web
+#  bot-runner e worker devem ser adicionados só quando houver RAM disponível
+#
+#  Uso:
+#    docker compose -f docker-compose.small.yml up -d
+#
+#  Orçamento de memória (idle → pico):
+#    postgres  :  30 –  80 MB
+#    redis     :   5 –  30 MB
+#    api       : 100 – 220 MB
+#    web       : 120 – 260 MB
+#    OS+Docker :       ~350 MB
+#    ──────────────────────────
+#    TOTAL     : ~600 MB – ~940 MB  (2GB swap cobre picos de startup)
+# ─────────────────────────────────────────────────────────────
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: bothosting
+      POSTGRES_USER: postgres
+      # Limitar shared_buffers e cache para VPS pequena
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command: >
+      postgres
+      -c shared_buffers=32MB
+      -c effective_cache_size=128MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=32MB
+      -c max_connections=50
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [app-net]
+    mem_limit: 150m
+    memswap_limit: 150m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --appendonly yes
+      --maxmemory 48mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
+    networks: [app-net]
+    mem_limit: 64m
+    memswap_limit: 64m
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: bot-platform-api:latest
+    restart: always
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      # Heap V8 limitado; o RSS real será ~120-220MB
+      NODE_OPTIONS: "--max-old-space-size=200 --expose-gc"
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+      MPESA_WEBHOOK_SECRET: ${MPESA_WEBHOOK_SECRET:-}
+      EMOLA_WEBHOOK_SECRET: ${EMOLA_WEBHOOK_SECRET:-}
+      MKESH_WEBHOOK_SECRET: ${MKESH_WEBHOOK_SECRET:-}
+    volumes:
+      - uploads-data:/app/uploads
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [app-net]
+    mem_limit: 280m
+    memswap_limit: 400m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  web:
+    image: bot-platform-web:latest
+    restart: always
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${FRONTEND_API_URL:-http://localhost:3000}
+      NODE_OPTIONS: "--max-old-space-size=220"
+    ports:
+      - "3001:3001"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [app-net]
+    mem_limit: 300m
+    memswap_limit: 450m
+
+networks:
+  app-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads-data:
