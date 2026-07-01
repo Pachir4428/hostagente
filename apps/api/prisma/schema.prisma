@@ -4,8 +4,14 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Runtime queries: use the Supabase pooled connection (port 6543, pgbouncer)
+  // or a plain Postgres URL when not using Supabase.
+  url       = env("DATABASE_URL")
+  // Schema migrations need a direct (non-pooled) connection.
+  // On Supabase this is the port 5432 URL. When not using Supabase (plain
+  // Postgres/VPS), set DIRECT_URL to the same value as DATABASE_URL.
+  directUrl = env("DIRECT_URL")
 }
 
 model User {

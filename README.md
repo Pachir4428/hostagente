@@ -59,6 +59,15 @@ hostagente/
 
 ---
 
+## Testar localmente com Supabase (antes da VPS)
+
+Queres validar a aplicação com uma base de dados Supabase antes de fazer
+deploy? Segue **[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)** — sobe a stack
+completa em `localhost` ligada ao Postgres do Supabase, sem precisar de
+Postgres local nem de tocar na VPS.
+
+---
+
 ## Deploy em Produção — Guia Rápido
 
 > Guia completo com todos os detalhes em **[DEPLOY.md](./DEPLOY.md)**

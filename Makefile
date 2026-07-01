@@ -1,4 +1,6 @@
-.PHONY: help build deploy logs health ps stop restart migrate seed clean dev
+.PHONY: help build deploy logs health ps stop restart migrate seed clean dev \
+	build-no-cache deploy-no-cache supabase-migrate supabase-up supabase-down \
+	supabase-logs supabase-health
 
 # Cores
 GREEN  := \033[0;32m
@@ -59,7 +61,7 @@ restart-api: ## Reiniciar apenas a API
 	docker compose -f docker-compose.prod.yml restart api
 
 ## ── Base de Dados ────────────────────────────────────────────
-migrate: ## Executar migrações Prisma
+migrate: ## Executar migrações Prisma (Postgres local/VPS)
 	docker compose -f docker-compose.prod.yml run --rm api npx prisma migrate deploy
 
 migrate-dev: ## Criar nova migração (dev)
@@ -67,6 +69,22 @@ migrate-dev: ## Criar nova migração (dev)
 
 studio: ## Abrir Prisma Studio
 	cd apps/api && npx prisma studio
+
+## ── Teste local com Supabase ──────────────────────────────────
+supabase-migrate: ## Aplicar o schema Prisma na base de dados Supabase (usa DATABASE_URL/DIRECT_URL do .env)
+	docker compose -f docker-compose.supabase.yml run --rm api npx prisma migrate deploy
+
+supabase-up: ## Construir e subir a stack local ligada ao Supabase
+	docker compose -f docker-compose.supabase.yml up -d --build
+
+supabase-down: ## Parar a stack local do Supabase
+	docker compose -f docker-compose.supabase.yml down
+
+supabase-logs: ## Ver logs da stack local do Supabase (ex: make supabase-logs SVC=api)
+	docker compose -f docker-compose.supabase.yml logs -f $(SVC)
+
+supabase-health: ## Verificar saúde da API a correr contra o Supabase
+	@docker compose -f docker-compose.supabase.yml exec -T api curl -sf http://localhost:3000/health || echo "API não disponível"
 
 ## ── Monitorização ────────────────────────────────────────────
 logs: ## Ver logs de um serviço (ex: make logs SVC=api)

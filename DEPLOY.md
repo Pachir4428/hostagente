@@ -20,6 +20,12 @@ Não execute no Windows CMD ou PowerShell.
 
 ---
 
+> **Queres testar tudo em `localhost` com Supabase antes de tocar na VPS?**
+> Consulta **[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)** — usa
+> `docker-compose.supabase.yml` e não precisa de Postgres local nem de VPS.
+
+---
+
 ## Deploy Rápido (num único script)
 
 ```bash
