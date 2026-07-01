@@ -1,5 +1,3 @@
-version: '3.9'
-
 # ─────────────────────────────────────────────────────────────
 #  Compose para VPS com 2GB RAM
 #  Inclui apenas os serviços essenciais: postgres, redis, api, web

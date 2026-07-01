@@ -20,8 +20,8 @@ ssh root@SEU_IP_DA_VPS
 
 ```bash
 # Clonar repositório
-git clone https://github.com/Pachir4428/hostagent.git
-cd hostagent
+git clone https://github.com/Pachir4428/hostagente.git
+cd hostagente
 
 # Executar setup (instala Docker, Node, Firewall, etc)
 bash scripts/setup-vps.sh
@@ -97,8 +97,13 @@ bash scripts/deploy.sh
 1. ✅ Valida variáveis do .env
 2. ✅ Faz git pull (atualiza código)
 3. ✅ Build das imagens Docker
-4. ✅ Sobe containers (postgres, redis, api, web, worker, etc)
-5. ✅ Cria volumes para dados persistentes
+4. ✅ Sobe containers (postgres, redis, api, web, worker, etc) e cria volumes
+5. ✅ Espera a API ficar saudável (`/health`)
+6. ✅ Corre as migrações do Prisma automaticamente
+
+> Se estiveres a atualizar depois de uma correção de bug (schema, Dockerfile,
+> tsconfig), usa `bash scripts/deploy.sh --no-cache` para forçar o Docker a
+> reconstruir todas as camadas em vez de reaproveitar cache desatualizado.
 
 ---
 
@@ -132,11 +137,11 @@ docker ps -a
 # Ver logs (tempo real)
 docker compose -f docker-compose.prod.yml logs -f api
 
-# Testar API
-curl http://localhost:3000/health
+# Testar API (o host pode não ter curl; testa a partir do container)
+docker compose -f docker-compose.prod.yml exec api curl -sf http://localhost:3000/health
 
 # Testar Frontend
-curl http://localhost:3001
+docker compose -f docker-compose.prod.yml exec api curl -sf http://web:3001
 ```
 
 ---
@@ -154,7 +159,7 @@ curl http://localhost:3001
 ## 🔄 Atualizar Código em Produção
 
 ```bash
-cd /root/hostagent1
+cd /root/hostagente
 git pull origin main
 bash scripts/deploy.sh
 ```
@@ -162,6 +167,10 @@ bash scripts/deploy.sh
 ---
 
 ## 🚨 Troubleshooting
+
+> Para uma lista detalhada de erros já resolvidos (Prisma/OpenSSL no Alpine,
+> imports quebrados, `pull access denied`, cache do Docker desatualizado, etc.)
+> consulta a secção "Resolução de Problemas" em `DEPLOY.md`.
 
 ### Container não sobe?
 ```bash

@@ -8,6 +8,12 @@ cd "$ROOT_DIR"
 
 echo "=== Bot Platform Deploy ==="
 
+NO_CACHE=""
+if [ "$1" = "--no-cache" ]; then
+    NO_CACHE="--no-cache"
+    echo "Building without Docker layer cache (--no-cache)"
+fi
+
 # Validate .env exists
 if [ ! -f ".env" ]; then
     echo "ERROR: .env file not found. Copy .env.example to .env and fill in values."
@@ -45,12 +51,12 @@ docker network create bot-network 2>/dev/null || true
 
 # Build images
 echo "Building Docker images..."
-docker build -t bot-platform-api:latest ./apps/api
-docker build -t bot-platform-web:latest ./apps/web \
+docker build $NO_CACHE -t bot-platform-api:latest ./apps/api
+docker build $NO_CACHE -t bot-platform-web:latest ./apps/web \
     --build-arg NEXT_PUBLIC_API_URL="${FRONTEND_API_URL:-http://localhost:3000}"
-docker build -t bot-platform-worker:latest ./apps/worker
-docker build -t bot-platform-runner:latest ./apps/bot-runner
-docker build -t bot-engine:latest ./apps/bot-engine
+docker build $NO_CACHE -t bot-platform-worker:latest ./apps/worker
+docker build $NO_CACHE -t bot-platform-runner:latest ./apps/bot-runner
+docker build $NO_CACHE -t bot-engine:latest ./apps/bot-engine
 
 echo "Images built"
 
@@ -58,18 +64,26 @@ echo "Images built"
 echo "Starting services..."
 docker compose -f docker-compose.prod.yml up -d
 
-# Wait for API health check
+# Wait for API health check (runs inside the container, host may not have curl)
 echo "Waiting for API to be healthy..."
+API_READY=""
 for i in $(seq 1 30); do
-    if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+    if docker compose -f docker-compose.prod.yml exec -T api curl -sf http://localhost:3000/health > /dev/null 2>&1; then
         echo "API is healthy!"
+        API_READY="1"
         break
-    fi
-    if [ "$i" -eq 30 ]; then
-        echo "WARNING: API health check timed out"
     fi
     sleep 2
 done
+
+if [ -z "$API_READY" ]; then
+    echo "WARNING: API health check timed out. Check logs with: make logs SVC=api"
+fi
+
+# Run database migrations
+echo "Running database migrations..."
+docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy || \
+    echo "WARNING: Migration failed or already up to date. Check logs if this is unexpected."
 
 echo "=== Deployment complete! ==="
 docker compose -f docker-compose.prod.yml ps

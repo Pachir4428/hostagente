@@ -27,8 +27,8 @@ Não execute no Windows CMD ou PowerShell.
 ssh root@SEU_IP
 
 # 2. Clonar o repositório
-git clone https://github.com/Pachir4428/hostagent1.git
-cd hostagent1
+git clone https://github.com/Pachir4428/hostagente.git
+cd hostagente
 
 # 3. Executar setup completo (instala Docker, nano, vim, Node, firewall)
 bash scripts/setup-vps.sh
@@ -62,8 +62,8 @@ docker network create bot-network
 ### 2 — Clonar e configurar
 
 ```bash
-git clone https://github.com/Pachir4428/hostagent1.git
-cd hostagent1
+git clone https://github.com/Pachir4428/hostagente.git
+cd hostagente
 cp .env.example .env
 nano .env
 ```
@@ -116,20 +116,16 @@ docker compose -f docker-compose.prod.yml up -d
 ### 5 — Migrações da base de dados
 
 ```bash
-# Aguardar o postgres iniciar (~10s) e depois:
-source .env
-docker run --rm \
-  --network bot-network \
-  -e DATABASE_URL="postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting" \
-  bot-platform-api:latest \
-  sh -c "npx prisma migrate deploy --schema=./prisma/schema.prisma"
+# Aguardar o container "api" ficar saudável e depois:
+docker compose -f docker-compose.prod.yml exec api npx prisma migrate deploy
 ```
 
 ### 6 — Verificar
 
 ```bash
 docker compose -f docker-compose.prod.yml ps
-curl http://localhost:3000/health
+# O host normalmente não tem `curl` instalado — testa a partir de dentro do container:
+docker compose -f docker-compose.prod.yml exec api curl -sf http://localhost:3000/health
 ```
 
 ---
@@ -241,22 +237,34 @@ docker stats
 ## Atualizar após novo push no GitHub
 
 ```bash
-cd hostagent1
+cd hostagente
 git pull
+
+# Uso normal (usa cache do Docker — builds mais rápidos)
 docker build -t bot-platform-api:latest ./apps/api
 docker compose -f docker-compose.prod.yml up -d --no-deps api
+
+# Se a atualização mudou apenas ficheiros de configuração (schema.prisma,
+# tsconfig.json, Dockerfile) o Docker pode reaproveitar uma camada em cache
+# desatualizada. Nesse caso reconstrói sem cache:
+docker build --no-cache -t bot-platform-api:latest ./apps/api
+
+# Ou, de forma mais simples, usa o Makefile:
+make deploy-no-cache
 ```
 
 ---
 
 ## Resolução de Problemas
 
-**`nano: command not found`**
+Esta secção documenta, por ordem cronológica típica, os erros mais comuns ao construir e subir a stack pela primeira vez numa VPS nova.
+
+### `nano: command not found`
 ```bash
 apt install -y nano
 ```
 
-**`npm: command not found`** (na VPS, fora do container)
+### `npm: command not found` (na VPS, fora do container)
 ```bash
 apt install -y nodejs npm
 # OU via nodesource:
@@ -264,36 +272,95 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt install -y nodejs
 ```
 
-**`docker-compose: command not found`**
+### `docker-compose: command not found`
 ```bash
 apt install -y docker-compose-v2
 # Usar sempre: docker compose (com espaço, sem hífen)
 ```
 
-**`npm ci` error / package-lock.json missing**
+### `curl: command not found` ao testar `/health`
+O **host** da VPS pode não ter `curl` instalado — mas a imagem `api` já o inclui.
+Testa sempre a partir de dentro do container, nunca do host:
+```bash
+docker compose -f docker-compose.prod.yml exec api curl -sf http://localhost:3000/health
+```
+
+### `pull access denied for bot-platform-web` (ou qualquer outra imagem)
+Significa que a imagem **não foi construída localmente** — o Docker tentou baixá-la
+de um registry remoto que não existe. Constrói a imagem em falta antes do `up -d`:
+```bash
+docker build -t bot-platform-web:latest ./apps/web
+```
+Confirma que todas as 5 imagens existem antes de subir a stack:
+```bash
+docker images | grep -E "bot-platform|bot-engine"
+```
+
+### `unable to evaluate symlinks in Dockerfile path: ... no such file or directory`
+O código local está desatualizado em relação ao GitHub (Dockerfile ainda não existia
+quando o repositório foi clonado). Atualiza e tenta de novo:
+```bash
+git fetch origin
+git checkout main
+git pull origin main
+```
+
+### Erro `tsc`: `Cannot read file '/tsconfig.base.json'`
+Cada app (`apps/api`, `apps/worker`, `apps/bot-runner`) tem o seu próprio
+`tsconfig.json` autossuficiente — não depende de ficheiros fora do contexto de
+build do Docker. Se este erro voltar a aparecer após um `git pull`, confirma que
+puxaste a versão mais recente e reconstrói sem cache (`docker build --no-cache ...`).
+
+### Erro `tsc`: `This expression is not callable` (helmet, compression, cookie-parser)
+Corrigido usando `import helmet from 'helmet'` (import default) em vez de
+`import * as helmet from 'helmet'` (import de namespace, não invocável). Se
+customizares `src/main.ts`, mantém os imports como `default import`.
+
+### `COPY failed: file not found ... stat prisma / stat public`
+Os Dockerfiles copiam apenas pastas que existem no contexto de build. Se
+adicionares uma nova dependência do Prisma a um app, garante que existe uma
+pasta `prisma/schema.prisma` dentro desse app (ex: `apps/worker/prisma/schema.prisma`)
+e que o Dockerfile tem `COPY prisma ./prisma/` seguido de `RUN npx prisma generate`.
+
+### `PrismaClientInitializationError: ... Error loading shared library libssl.so.1.1`
+O Node Alpine usa OpenSSL 3.x, mas o Prisma por padrão gera um engine para
+OpenSSL 1.1. Corrigido declarando `binaryTargets` no `schema.prisma`:
+```prisma
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+```
+Se este erro reaparecer, o Docker provavelmente reaproveitou uma camada em
+cache do `npx prisma generate` anterior à correção — reconstrói com `--no-cache`.
+
+### `npm ci` error / package-lock.json missing
 ```bash
 # Já corrigido nos Dockerfiles (usa npm install)
 # Se persistir: git pull e rebuildar
 ```
 
-**API não responde no health check**
+### Container `api` ou `worker` fica em `Restarting`
 ```bash
 docker compose -f docker-compose.prod.yml logs api --tail=50
+docker compose -f docker-compose.prod.yml logs worker --tail=50
+```
+Os erros mais comuns já cobertos acima (Prisma/OpenSSL, imports quebrados). Após
+corrigir, reconstrói **sem cache** a imagem afetada e sobe de novo:
+```bash
+docker build --no-cache -t bot-platform-api:latest ./apps/api
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-**Erro de migrações**
+### Erro de migrações
 ```bash
 # Verificar se o postgres está a correr
 docker compose -f docker-compose.prod.yml ps postgres
 # Tentar novamente a migração
-source .env
-docker run --rm --network bot-network \
-  -e DATABASE_URL="postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting" \
-  bot-platform-api:latest \
-  sh -c "npx prisma migrate deploy --schema=./prisma/schema.prisma"
+docker compose -f docker-compose.prod.yml exec api npx prisma migrate deploy
 ```
 
-**Erro `tzdata` durante apt upgrade (Ubuntu 24.04)**
+### Erro `tzdata` durante apt upgrade (Ubuntu 24.04)
 ```bash
 export DEBIAN_FRONTEND=noninteractive
 ln -fs /usr/share/zoneinfo/Africa/Maputo /etc/localtime

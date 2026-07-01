@@ -32,8 +32,19 @@ build: ## Construir todas as imagens Docker
 	docker build -t bot-platform-web:latest ./apps/web
 	@echo "$(GREEN)Build concluído.$(RESET)"
 
+build-no-cache: ## Construir todas as imagens sem usar cache (usar após corrigir bugs)
+	docker build --no-cache -t bot-platform-api:latest ./apps/api
+	docker build --no-cache -t bot-platform-runner:latest ./apps/bot-runner
+	docker build --no-cache -t bot-engine:latest ./apps/bot-engine
+	docker build --no-cache -t bot-platform-worker:latest ./apps/worker
+	docker build --no-cache -t bot-platform-web:latest ./apps/web
+	@echo "$(GREEN)Build (sem cache) concluído.$(RESET)"
+
 deploy: ## Deploy completo (build + migrate + up)
 	bash scripts/deploy.sh
+
+deploy-no-cache: ## Deploy completo sem cache Docker (usar após git pull de correções)
+	bash scripts/deploy.sh --no-cache
 
 up: ## Subir serviços de produção
 	docker compose -f docker-compose.prod.yml up -d --remove-orphans
@@ -68,7 +79,7 @@ ps: ## Estado dos serviços
 	docker compose -f docker-compose.prod.yml ps
 
 health: ## Verificar saúde da API
-	@curl -sf http://localhost:3000/health | python3 -m json.tool 2>/dev/null || echo "API não disponível"
+	@docker compose -f docker-compose.prod.yml exec -T api curl -sf http://localhost:3000/health || echo "API não disponível"
 
 ## ── Limpeza ──────────────────────────────────────────────────
 clean: ## Remover imagens e volumes não usados

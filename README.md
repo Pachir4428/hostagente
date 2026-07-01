@@ -18,7 +18,7 @@ Plataforma completa para hospedar, gerir e monitorizar bots WhatsApp com interfa
 ## Arquitetura
 
 ```
-hostagent1/
+hostagente/
 ├── apps/
 │   ├── api/          → NestJS — REST API + WebSocket
 │   ├── bot-runner/   → Orquestrador Docker (1 container por bot)
@@ -72,8 +72,8 @@ apt update && apt install -y docker.io docker-compose-v2 git
 systemctl enable --now docker
 
 # 3. Clonar o repositório
-git clone https://github.com/Pachir4428/hostagent1.git
-cd hostagent1
+git clone https://github.com/Pachir4428/hostagente.git
+cd hostagente
 
 # 4. Configurar variáveis de ambiente
 cp .env.example .env
