@@ -1,6 +1,8 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "strict": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
     "module": "commonjs",
     "declaration": true,
     "removeComments": true,
