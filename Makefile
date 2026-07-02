@@ -61,8 +61,8 @@ restart-api: ## Reiniciar apenas a API
 	docker compose -f docker-compose.prod.yml restart api
 
 ## ── Base de Dados ────────────────────────────────────────────
-migrate: ## Executar migrações Prisma (Postgres local/VPS)
-	docker compose -f docker-compose.prod.yml run --rm api npx prisma migrate deploy
+migrate: ## Sincronizar o schema na base de dados (cria/atualiza tabelas via prisma db push)
+	docker compose -f docker-compose.prod.yml exec -T api npx prisma db push --skip-generate
 
 migrate-dev: ## Criar nova migração (dev)
 	cd apps/api && npx prisma migrate dev
@@ -72,7 +72,7 @@ studio: ## Abrir Prisma Studio
 
 ## ── Teste local com Supabase ──────────────────────────────────
 supabase-migrate: ## Aplicar o schema Prisma na base de dados Supabase (usa DATABASE_URL/DIRECT_URL do .env)
-	docker compose -f docker-compose.supabase.yml run --rm api npx prisma migrate deploy
+	docker compose -f docker-compose.supabase.yml run --rm api npx prisma db push --skip-generate
 
 supabase-up: ## Construir e subir a stack local ligada ao Supabase
 	docker compose -f docker-compose.supabase.yml up -d --build

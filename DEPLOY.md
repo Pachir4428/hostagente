@@ -119,12 +119,18 @@ docker build -t bot-platform-web:latest    ./apps/web
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-### 5 — Migrações da base de dados
+### 5 — Criar as tabelas na base de dados
 
 ```bash
 # Aguardar o container "api" ficar saudável e depois:
-docker compose -f docker-compose.prod.yml exec api npx prisma migrate deploy
+docker compose -f docker-compose.prod.yml exec api npx prisma db push
 ```
+
+> Usa-se `db push` (e não `migrate deploy`) porque o projeto não versiona
+> ficheiros de migração — `db push` cria as tabelas diretamente do
+> `schema.prisma`. É idempotente e já corre automaticamente no `deploy.sh`.
+> Sem este passo, o registo/login devolve **500 Internal server error** com
+> `The table 'public.User' does not exist`.
 
 ### 6 — Verificar
 
@@ -397,12 +403,18 @@ docker compose -f docker-compose.prod.yml up -d
 > Confirma no DevTools (F12 → Network) para onde a chamada `/auth/login`
 > está a ir: deve apontar para o IP/domínio da VPS, nunca `localhost`.
 
-### Erro de migrações
+### `500 Internal server error` no registo/login — `The table 'public.User' does not exist`
+As tabelas nunca foram criadas na base de dados. Cria-as:
+```bash
+docker compose -f docker-compose.prod.yml exec api npx prisma db push
+```
+
+### Erro ao criar as tabelas
 ```bash
 # Verificar se o postgres está a correr
 docker compose -f docker-compose.prod.yml ps postgres
-# Tentar novamente a migração
-docker compose -f docker-compose.prod.yml exec api npx prisma migrate deploy
+# Tentar novamente
+docker compose -f docker-compose.prod.yml exec api npx prisma db push
 ```
 
 ### Erro `tzdata` durante apt upgrade (Ubuntu 24.04)

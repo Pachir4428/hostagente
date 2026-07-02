@@ -80,10 +80,15 @@ if [ -z "$API_READY" ]; then
     echo "WARNING: API health check timed out. Check logs with: make logs SVC=api"
 fi
 
-# Run database migrations
-echo "Running database migrations..."
-docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy || \
-    echo "WARNING: Migration failed or already up to date. Check logs if this is unexpected."
+# Sync the database schema.
+# This project ships the Prisma schema without versioned migration files, so
+# `prisma migrate deploy` finds nothing to apply and the tables are never
+# created. `prisma db push` creates/updates the tables directly from
+# schema.prisma, which is what we want for this deployment model. It is
+# idempotent, so running it on every deploy is safe.
+echo "Syncing database schema (prisma db push)..."
+docker compose -f docker-compose.prod.yml exec -T api npx prisma db push --skip-generate || \
+    echo "WARNING: Database sync failed. Check logs with: make logs SVC=api"
 
 echo "=== Deployment complete! ==="
 docker compose -f docker-compose.prod.yml ps
