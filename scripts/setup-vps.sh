@@ -53,7 +53,7 @@ echo "Firewall configured"
 docker network create bot-network 2>/dev/null || true
 
 # Setup nginx
-cat > /etc/nginx/sites-available/bot-platform << 'NGINX'
+cat > /etc/nginx/sites-available/bot-platform.conf << 'NGINX'
 server {
     listen 80;
     server_name _;
@@ -88,7 +88,7 @@ server {
 }
 NGINX
 
-ln -sf /etc/nginx/sites-available/bot-platform /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/bot-platform.conf /etc/nginx/sites-enabled/bot-platform.conf
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 

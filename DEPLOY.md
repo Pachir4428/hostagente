@@ -390,13 +390,46 @@ apt install --reinstall -y tzdata
 dpkg --configure -a
 ```
 
+### `dpkg` error ao instalar Docker: `trying to overwrite '/usr/libexec/docker/cli-plugins/docker-compose'`
+Acontece quando a VPS já tinha `docker-compose-v2` instalado via apt do
+Ubuntu e o script tenta instalar o `docker-compose-plugin` oficial da Docker
+(mesmo ficheiro, pacotes diferentes). Remove o pacote antigo primeiro:
+```bash
+apt-get remove -y docker-compose-v2
+dpkg --configure -a
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+### `nginx -t` falha com `open() ".../sites-enabled/bot-platform.conf" failed (2: No such file or directory)`
+Em VPS com painel de hosting (cPanel/Virtualmin/DirectAdmin), o `nginx.conf`
+principal pode referenciar explicitamente `sites-enabled/bot-platform.conf`
+(com extensão `.conf`) em vez de usar wildcard. Garante que tanto o ficheiro
+em `sites-available` como o link em `sites-enabled` têm a extensão `.conf`:
+```bash
+ln -sf /etc/nginx/sites-available/bot-platform.conf /etc/nginx/sites-enabled/bot-platform.conf
+nginx -t
+```
+
+### VPS já tem Apache/Exim/BIND (painel de hosting pré-configurado)
+Se `nginx` não conseguir arrancar porque a porta 80 já está em uso, a VPS
+provavelmente já corre Apache (comum em VPS com painel de hosting
+pré-instalado). Ou usas portas diferentes para a app (`IP:3000`/`IP:3001`,
+sem nginx/SSL), ou paras o Apache conscientemente:
+```bash
+systemctl stop apache2
+systemctl disable apache2
+systemctl start nginx
+```
+⚠️ Isto derruba qualquer site que já esteja a correr via Apache nesta VPS —
+confirma antes que não há nada crítico lá.
+
 ---
 
 ## Com Domínio + SSL (Opcional)
 
 ```bash
 apt install -y nginx certbot python3-certbot-nginx
-nano /etc/nginx/sites-available/bot-platform
+nano /etc/nginx/sites-available/bot-platform.conf
 ```
 
 Conteúdo do ficheiro nginx (substituir `seudominio.com`):
@@ -431,7 +464,7 @@ server {
 ```
 
 ```bash
-ln -s /etc/nginx/sites-available/bot-platform /etc/nginx/sites-enabled/
+ln -s /etc/nginx/sites-available/bot-platform.conf /etc/nginx/sites-enabled/bot-platform.conf
 nginx -t && systemctl reload nginx
 certbot --nginx -d seudominio.com --non-interactive --agree-tos --email teu@email.com
 ```

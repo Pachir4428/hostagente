@@ -114,7 +114,7 @@ bash scripts/deploy.sh
 nano /etc/nginx/sites-available/bot-platform.conf
 
 # Ativar site
-ln -s /etc/nginx/sites-available/bot-platform.conf /etc/nginx/sites-enabled/
+ln -s /etc/nginx/sites-available/bot-platform.conf /etc/nginx/sites-enabled/bot-platform.conf
 
 # Testar configuração
 nginx -t
