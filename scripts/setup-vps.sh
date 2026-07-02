@@ -3,6 +3,18 @@ set -e
 
 echo "=== Bot Platform VPS Setup ==="
 
+# Non-interactive apt (avoids prompts hanging the script over SSH)
+export DEBIAN_FRONTEND=noninteractive
+
+# Pre-configure timezone so tzdata's postinstall script doesn't try to
+# prompt interactively during "apt-get upgrade" (this is the #1 cause of
+# "dpkg returned an error code (1)" on fresh VPS images).
+ln -fs /usr/share/zoneinfo/UTC /etc/localtime
+echo "Etc/UTC" > /etc/timezone
+
+# Repair any package left half-configured by a previous failed run
+dpkg --configure -a || true
+
 # Update system
 apt-get update && apt-get upgrade -y
 
@@ -82,6 +94,6 @@ nginx -t && systemctl reload nginx
 
 echo "=== Setup complete! ==="
 echo "Next steps:"
-echo "1. Clone your repo to /opt/bot-platform"
-echo "2. Copy .env.example to .env and fill in your values"
-echo "3. Run: make prod-deploy"
+echo "1. cp .env.example .env"
+echo "2. nano .env   # fill in passwords and secrets"
+echo "3. make deploy   (or: bash scripts/deploy.sh)"
