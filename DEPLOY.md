@@ -373,6 +373,30 @@ docker build --no-cache -t bot-platform-api:latest ./apps/api
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+### "Login failed" / "Registration failed" no browser (mas API saudável)
+A stack está toda `Up` e `/health` responde, mas registar/entrar falha no
+navegador. Causa: a URL da API fica **gravada no build** do Next.js
+(`NEXT_PUBLIC_API_URL`). Se o build usou o padrão `http://localhost:3000`,
+o **browser do visitante** tenta chamar a API na máquina dele próprio — não
+na VPS. Além disso o CORS da API só aceita a origem definida em `FRONTEND_URL`.
+
+Corrige no `.env` da VPS (substitui `SEU_IP` pelo IP público, ou domínio):
+```env
+FRONTEND_URL=http://SEU_IP:3001
+FRONTEND_API_URL=http://SEU_IP:3000
+```
+E reconstrói o `web` **passando o build-arg** (rebuild simples não basta):
+```bash
+source .env
+docker build --no-cache -t bot-platform-web:latest ./apps/web \
+  --build-arg NEXT_PUBLIC_API_URL="$FRONTEND_API_URL"
+docker compose -f docker-compose.prod.yml up -d
+```
+> `bash scripts/deploy.sh` já passa este build-arg automaticamente — este
+> problema só acontece quando o `web` é construído à mão sem `--build-arg`.
+> Confirma no DevTools (F12 → Network) para onde a chamada `/auth/login`
+> está a ir: deve apontar para o IP/domínio da VPS, nunca `localhost`.
+
 ### Erro de migrações
 ```bash
 # Verificar se o postgres está a correr
