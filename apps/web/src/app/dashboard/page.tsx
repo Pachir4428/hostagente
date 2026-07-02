@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { authApi } from '@/lib/api';
 import { clearToken, getToken } from '@/lib/auth';
+import { botStatus } from '@/lib/botStatus';
+import { Logo } from '@/components/Logo';
 
 interface Bot {
   id: string;
@@ -14,22 +16,14 @@ interface Bot {
   createdAt: string;
 }
 
-const statusColors: Record<string, string> = {
-  running: 'bg-green-100 text-green-800',
-  stopped: 'bg-gray-100 text-gray-800',
-  starting: 'bg-yellow-100 text-yellow-800',
-  stopping: 'bg-orange-100 text-orange-800',
-  error: 'bg-red-100 text-red-800',
-  waiting_qr: 'bg-blue-100 text-blue-800',
-};
-
 export default function DashboardPage() {
   const router = useRouter();
   const [bots, setBots] = useState<Bot[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newBotName, setNewBotName] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     if (!getToken()) {
@@ -37,6 +31,7 @@ export default function DashboardPage() {
       return;
     }
     fetchBots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchBots() {
@@ -55,12 +50,12 @@ export default function DashboardPage() {
     if (!newBotName.trim()) return;
     setCreating(true);
     try {
-      await authApi.post('/bots', { name: newBotName });
+      await authApi.post('/bots', { name: newBotName.trim() });
       setNewBotName('');
-      setShowForm(false);
+      setShowModal(false);
       fetchBots();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to create bot');
+      alert(err.response?.data?.message || 'Não foi possível criar o bot');
     } finally {
       setCreating(false);
     }
@@ -71,87 +66,137 @@ export default function DashboardPage() {
     router.replace('/login');
   }
 
+  const filtered = bots.filter((b) => b.name.toLowerCase().includes(query.toLowerCase()));
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
-          <h1 className="text-xl font-bold text-gray-900">Bot Platform</h1>
-          <button onClick={handleLogout} className="text-sm text-gray-600 hover:text-gray-900">
-            Logout
-          </button>
-        </div>
-      </nav>
-
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">My Bots</h2>
-          <button
-            onClick={() => setShowForm(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-          >
-            + New Bot
-          </button>
-        </div>
-
-        {showForm && (
-          <div className="mb-6 p-4 bg-white rounded-xl shadow-sm border">
-            <h3 className="font-medium mb-3">Create New Bot</h3>
-            <div className="flex gap-3">
-              <input
-                type="text"
-                placeholder="Bot name"
-                value={newBotName}
-                onChange={(e) => setNewBotName(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                onClick={createBot}
-                disabled={creating}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {creating ? 'Creating...' : 'Create'}
-              </button>
-              <button
-                onClick={() => setShowForm(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-            </div>
+    <div className="min-h-screen bg-bg">
+      {/* Top bar */}
+      <header className="sticky top-0 z-30 border-b border-line bg-bg/70 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3.5">
+          <Logo />
+          <div className="flex items-center gap-3">
+            <span className="chip hidden border border-line bg-white/[0.03] text-muted sm:inline-flex">
+              ◈ Plano FREE
+            </span>
+            <button
+              onClick={handleLogout}
+              className="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted transition hover:bg-white/[0.05] hover:text-ink"
+              title="Sair"
+            >
+              ⏻
+            </button>
           </div>
-        )}
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-5 py-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="font-display text-2xl font-bold">Os teus bots</h1>
+            <p className="mt-1 text-sm text-muted">Gere, liga e monitoriza os teus bots de WhatsApp.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted2">⌕</span>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Pesquisar…"
+                className="field !w-48 pl-8"
+              />
+            </div>
+            <button onClick={() => setShowModal(true)} className="btn-primary whitespace-nowrap">
+              + Novo bot
+            </button>
+          </div>
+        </div>
 
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="flex justify-center py-20">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-teal" />
           </div>
-        ) : bots.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl shadow-sm border">
-            <p className="text-gray-500 mb-4">No bots yet. Create your first bot!</p>
+        ) : filtered.length === 0 ? (
+          <div className="card mt-8 flex flex-col items-center justify-center py-16 text-center">
+            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-teal/10 text-2xl">🤖</div>
+            <p className="mt-4 font-display text-lg font-semibold">
+              {bots.length === 0 ? 'Ainda não tens bots' : 'Nenhum bot encontrado'}
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              {bots.length === 0 ? 'Cria o teu primeiro bot para começar.' : 'Tenta outra pesquisa.'}
+            </p>
+            {bots.length === 0 && (
+              <button onClick={() => setShowModal(true)} className="btn-primary mt-6">
+                + Criar primeiro bot
+              </button>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {bots.map((bot) => (
-              <Link key={bot.id} href={`/dashboard/bots/${bot.id}`}>
-                <div className="bg-white rounded-xl shadow-sm border p-5 hover:shadow-md transition-shadow cursor-pointer">
-                  <div className="flex justify-between items-start mb-3">
-                    <h3 className="font-semibold text-gray-900">{bot.name}</h3>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[bot.status] || 'bg-gray-100 text-gray-800'}`}>
-                      {bot.status}
-                    </span>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((bot) => {
+              const s = botStatus(bot.status);
+              return (
+                <Link key={bot.id} href={`/dashboard/bots/${bot.id}`}>
+                  <div className="card group h-full p-5 transition hover:border-teal/30 hover:shadow-glow">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="grid h-10 w-10 place-items-center rounded-xl bg-teal/10 font-display font-bold text-teal">
+                          {bot.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <h3 className="font-display font-semibold">{bot.name}</h3>
+                          {bot.phoneNumber && <p className="text-xs text-muted">{bot.phoneNumber}</p>}
+                        </div>
+                      </div>
+                      <span className={`chip ${s.chip}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+                        {s.label}
+                      </span>
+                    </div>
+                    <div className="mt-5 flex items-center justify-between text-xs text-muted">
+                      <span>Criado {new Date(bot.createdAt).toLocaleDateString('pt-PT')}</span>
+                      <span className="text-teal opacity-0 transition group-hover:opacity-100">Abrir →</span>
+                    </div>
                   </div>
-                  {bot.phoneNumber && (
-                    <p className="text-sm text-gray-500">{bot.phoneNumber}</p>
-                  )}
-                  <p className="text-xs text-gray-400 mt-2">
-                    Created {new Date(bot.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         )}
       </main>
+
+      {/* Create modal */}
+      {showModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setShowModal(false)}
+        >
+          <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-display text-xl font-bold">Criar novo bot</h2>
+            <p className="mt-1 text-sm text-muted">
+              Define o essencial. Podes afinar comandos e menus depois de criar.
+            </p>
+            <div className="mt-6 space-y-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-muted">Nome do bot</label>
+                <input
+                  autoFocus
+                  value={newBotName}
+                  onChange={(e) => setNewBotName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && createBot()}
+                  placeholder="Ex: Atende Já"
+                  className="field"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button onClick={() => setShowModal(false)} className="btn-ghost">Cancelar</button>
+              <button onClick={createBot} disabled={creating || !newBotName.trim()} className="btn-primary">
+                {creating ? 'A criar…' : 'Criar bot'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
