@@ -330,15 +330,30 @@ e que o Dockerfile tem `COPY prisma ./prisma/` seguido de `RUN npx prisma genera
 
 ### `PrismaClientInitializationError: ... Error loading shared library libssl.so.1.1`
 O Node Alpine usa OpenSSL 3.x, mas o Prisma por padrão gera um engine para
-OpenSSL 1.1. Corrigido declarando `binaryTargets` no `schema.prisma`:
-```prisma
-generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
-}
+OpenSSL 1.1. Isto precisa de **duas** correções, ambas já aplicadas:
+
+1. `binaryTargets` no `schema.prisma`:
+   ```prisma
+   generator client {
+     provider      = "prisma-client-js"
+     binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+   }
+   ```
+2. **O binário `openssl` tem de estar instalado na imagem** — sem ele, o
+   Prisma não consegue detectar a versão do OpenSSL (mostra o aviso
+   `Prisma failed to detect the libssl/openssl version`) e assume 1.1 de
+   qualquer forma, ignorando o `binaryTargets`. Os `Dockerfile` de `apps/api`
+   e `apps/worker` já correm `apk add --no-cache openssl` tanto no estágio de
+   build (antes do `prisma generate`) como no estágio final de runtime (o
+   engine volta a detectar a versão do OpenSSL quando a app arranca).
+
+Se este erro reaparecer, confirma que o teu `git pull` trouxe as duas
+correções e reconstrói **sem cache**:
+```bash
+git pull origin main
+docker build --no-cache -t bot-platform-api:latest ./apps/api
+docker build --no-cache -t bot-platform-worker:latest ./apps/worker
 ```
-Se este erro reaparecer, o Docker provavelmente reaproveitou uma camada em
-cache do `npx prisma generate` anterior à correção — reconstrói com `--no-cache`.
 
 ### `npm ci` error / package-lock.json missing
 ```bash
