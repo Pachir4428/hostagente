@@ -11,6 +11,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [businessName, setBusinessName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,7 +31,7 @@ export default function RegisterPage() {
       // The API accepts a single `name`; join first + last name.
       // `phone` is collected for later (payments) but not sent on register.
       const name = `${firstName} ${lastName}`.trim();
-      const res = await api.post('/auth/register', { email, password, name });
+      const res = await api.post('/auth/register', { email, password, name, businessName });
       setToken(res.data.accessToken);
       router.replace('/dashboard');
     } catch (err: any) {
@@ -94,6 +95,10 @@ export default function RegisterPage() {
                 <label className="mb-1.5 block text-sm font-medium text-muted">Apelido</label>
                 <input type="text" required value={lastName} onChange={(e) => setLastName(e.target.value)} className="field" />
               </div>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-muted">Nome do negócio</label>
+              <input type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} className="field" placeholder="Ex: Recargas Maputo" />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-muted">Número de telefone</label>

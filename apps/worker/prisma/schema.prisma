@@ -9,75 +9,153 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum Role {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  STAFF
+}
+
+enum TenantStatus {
+  trial
+  active
+  past_due
+  suspended
+  cancelled
+}
+
+enum SubStatus {
+  trial
+  active
+  past_due
+  cancelled
+}
+
+enum TxStatus {
+  delivered
+  refused
+  duplicate
+  pending
+}
+
+enum Operator {
+  mpesa
+  emola
+  mkesh
+}
+
+model Plan {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  priceMonthly    Float    @default(0)
+  maxTransactions Int      @default(1000)
+  maxUsers        Int      @default(1)
+  features        String[]
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  tenants       Tenant[]
+  subscriptions Subscription[]
+}
+
+model Tenant {
+  id              String       @id @default(uuid())
+  name            String
+  contact         String?
+  receivingNumber String?
+  status          TenantStatus @default(trial)
+  planId          String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  plan         Plan?         @relation(fields: [planId], references: [id])
+  users        User[]
+  products     Product[]
+  transactions Transaction[]
+  apiKeys      ApiKey[]
+  subscription Subscription?
+  invoices     Invoice[]
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
   name         String
   passwordHash String
-  role         String   @default("user")
+  role         Role     @default(TENANT_ADMIN)
+  tenantId     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  bots          Bot[]
-  subscriptions Subscription[]
-  payments      Payment[]
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
-model Plan {
-  id           String   @id @default(uuid())
-  name         String
-  type         String   @unique
-  maxBots      Int      @default(1)
-  priceMonthly Float    @default(0)
-  features     String[]
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
+model Product {
+  id          String    @id @default(uuid())
+  tenantId    String
+  amount      Float // valor recebido em MZN que dispara este pacote
+  description String
+  megabytes   Int?
+  operator    Operator?
+  autoDetect  Boolean   @default(true)
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  subscriptions Subscription[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([tenantId, amount, operator])
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  tenantId    String
+  productId   String?
+  phoneNumber String
+  amount      Float
+  operator    Operator
+  status      TxStatus @default(pending)
+  reference   String?
+  rawMessage  String?
+  createdAt   DateTime @default(now())
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([tenantId, createdAt])
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  tenantId   String
+  name       String    @default("MacroDroid")
+  key        String    @unique
+  lastUsedAt DateTime?
+  revoked    Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
 model Subscription {
-  id                 String   @id @default(uuid())
-  userId             String
-  planId             String
-  status             String   @default("active")
-  currentPeriodStart DateTime @default(now())
-  currentPeriodEnd   DateTime
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id               String    @id @default(uuid())
+  tenantId         String    @unique
+  planId           String
+  status           SubStatus @default(trial)
+  currentPeriodEnd DateTime
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan     Plan      @relation(fields: [planId], references: [id])
-  payments Payment[]
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan   Plan   @relation(fields: [planId], references: [id])
 }
 
-model Bot {
-  id          String   @id @default(uuid())
-  name        String
-  status      String   @default("stopped")
-  userId      String
-  phoneNumber String?
-  containerId String?
-  sessionData String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model Invoice {
+  id        String   @id @default(uuid())
+  tenantId  String
+  amount    Float
+  status    String   @default("pending") // paid | failed | pending
+  createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Payment {
-  id             String   @id @default(uuid())
-  userId         String
-  subscriptionId String?
-  amount         Float
-  currency       String   @default("MZN")
-  status         String   @default("pending")
-  provider       String
-  providerRef    String?
-  metadata       Json?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  user         User          @relation(fields: [userId], references: [id])
-  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }

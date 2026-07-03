@@ -6,19 +6,19 @@ import { getToken } from '@/lib/auth';
 import { Logo } from '@/components/Logo';
 
 const features = [
-  { icon: '🤖', title: 'IA a responder 24/7', desc: 'Escolhe entre 3 modelos de IA para responder aos teus clientes automaticamente, a qualquer hora.' },
-  { icon: '💬', title: 'WhatsApp nativo', desc: 'Liga o teu número por QR code ou código de emparelhamento. Sem APIs complicadas.' },
-  { icon: '🇲🇿', title: 'Pagamentos em meticais', desc: 'Recebe e paga com M-Pesa, e-Mola e mKesh. Feito para Moçambique.' },
-  { icon: '⚡', title: 'Bots isolados', desc: 'Cada bot corre no seu próprio container seguro, sempre online.' },
-  { icon: '📊', title: 'Painel em tempo real', desc: 'Acompanha o estado dos teus bots ao vivo, com estatísticas de mensagens.' },
-  { icon: '🔒', title: 'Seguro por defeito', desc: 'Sessões encriptadas e dados protegidos. O teu WhatsApp, sob o teu controlo.' },
+  { icon: '⚡', title: 'Deteção automática', desc: 'O MacroDroid lê o SMS de M-Pesa/e-Mola e a venda é registada em segundos, sem toques.' },
+  { icon: '📦', title: 'Catálogo de pacotes', desc: 'Define valor → pacote de dados. Cada pagamento reconhecido entrega o pacote certo.' },
+  { icon: '🇲🇿', title: 'Feito para Moçambique', desc: 'M-Pesa, e-Mola e mKesh. Recebe e concilia tudo em meticais.' },
+  { icon: '📊', title: 'Painel em tempo real', desc: 'Vendas de hoje, receita, histórico completo e estado do MacroDroid ao vivo.' },
+  { icon: '🔔', title: 'Alertas inteligentes', desc: 'Avisos de falhas de rede, pagamentos não reconhecidos e subscrição a expirar.' },
+  { icon: '🔒', title: 'Multi-tenant seguro', desc: 'Cada revendedor tem os seus dados isolados e a sua chave de API própria.' },
 ];
 
 const steps = [
-  { n: '1', title: 'Cria a tua conta', desc: 'Grátis, em menos de um minuto. Sem cartão de crédito.' },
-  { n: '2', title: 'Cria um bot', desc: 'Dá-lhe um nome e escolhe o modelo de IA.' },
-  { n: '3', title: 'Liga o WhatsApp', desc: 'Aponta a câmara ao QR code ou usa o código de emparelhamento.' },
-  { n: '4', title: 'Está online', desc: 'O teu bot começa a responder automaticamente. É só isto.' },
+  { n: '1', title: 'Cria a tua conta', desc: 'Grátis, em menos de um minuto. Trial de 14 dias.' },
+  { n: '2', title: 'Define os pacotes', desc: 'Valor recebido → pacote de dados a entregar.' },
+  { n: '3', title: 'Liga o MacroDroid', desc: 'Cola a tua chave de API e o endpoint no MacroDroid do telemóvel.' },
+  { n: '4', title: 'Vende no automático', desc: 'Cada pagamento detetado vira uma venda registada. É só isto.' },
 ];
 
 const plans = [
@@ -28,10 +28,10 @@ const plans = [
 ];
 
 const faqs = [
-  { q: 'Preciso de cartão de crédito?', a: 'Não. O plano gratuito não pede cartão e podes começar já. Nos planos pagos usamos M-Pesa, e-Mola e mKesh.' },
-  { q: 'Como ligo o meu WhatsApp?', a: 'Depois de criar um bot, aparece um QR code (ou código de emparelhamento) que ligas no teu WhatsApp em Aparelhos ligados.' },
-  { q: 'Os meus dados estão seguros?', a: 'Sim. Cada bot corre isolado no seu container e as sessões são encriptadas.' },
-  { q: 'Posso ter vários bots?', a: 'No plano gratuito tens 1 bot. Nos planos PRO e BUSINESS podes ter bots ilimitados.' },
+  { q: 'Preciso de cartão de crédito?', a: 'Não. Começas com 14 dias de trial e sem cartão. Nos planos pagos usamos M-Pesa, e-Mola e mKesh.' },
+  { q: 'O que é o MacroDroid?', a: 'É uma app Android que automatiza ações. Configuras um gatilho no SMS de pagamento que envia os dados para a HostAgente através da tua chave de API.' },
+  { q: 'Como é detetado o pagamento?', a: 'Quando chega o SMS de M-Pesa/e-Mola, o MacroDroid envia o valor e o número. A HostAgente encontra o pacote pelo valor e regista a venda.' },
+  { q: 'Os meus dados estão seguros?', a: 'Sim. Cada revendedor (tenant) tem os seus dados isolados e uma chave de API própria que podes regenerar a qualquer momento.' },
 ];
 
 export default function Home() {
@@ -78,10 +78,10 @@ export default function Home() {
           Feito para Moçambique · M-Pesa · e-Mola · mKesh
         </span>
         <h1 className="mx-auto mt-6 max-w-4xl font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl">
-          Os teus bots de <span className="text-teal">WhatsApp</span>,<br className="hidden sm:block" /> sempre online.
+          Vende dados no <span className="text-teal">automático</span>,<br className="hidden sm:block" /> a cada pagamento.
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-muted">
-          Automatiza o teu WhatsApp com IA e paga em meticais. Do zero ao bot online em menos de um minuto.
+          Deteta pagamentos M-Pesa e e-Mola com o MacroDroid e entrega pacotes de dados automaticamente. Feito para revendedores em Moçambique.
         </p>
         <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
           <Link href="/register" className="btn-primary">Criar conta grátis →</Link>
@@ -91,9 +91,9 @@ export default function Home() {
         {/* Stats */}
         <div className="mx-auto mt-16 grid max-w-3xl grid-cols-3 gap-4">
           {[
-            { v: '99.9%', l: 'Uptime' },
-            { v: '3', l: 'Modelos de IA' },
-            { v: '<60s', l: 'Para ligar' },
+            { v: '<5s', l: 'Deteção → venda' },
+            { v: '3', l: 'Operadoras' },
+            { v: '24/7', l: 'Automático' },
           ].map((s) => (
             <div key={s.l} className="card px-4 py-6">
               <div className="font-display text-3xl font-bold text-teal">{s.v}</div>

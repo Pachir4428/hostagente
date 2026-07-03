@@ -21,7 +21,7 @@ export default function LoginPage() {
     try {
       const res = await api.post('/auth/login', { email, password });
       setToken(res.data.accessToken);
-      router.replace('/dashboard');
+      router.replace(res.data.user?.role === 'SUPER_ADMIN' ? '/admin' : '/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Não foi possível entrar. Verifica os dados.');
     } finally {

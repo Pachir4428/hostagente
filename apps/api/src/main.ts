@@ -27,8 +27,8 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle('Bot Platform API')
-    .setDescription('WhatsApp Bot Hosting Platform')
+    .setTitle('HostAgente API')
+    .setDescription('Plataforma de revenda com deteção de pagamentos (MacroDroid)')
     .setVersion(process.env.APP_VERSION || '1.0.0')
     .addBearerAuth()
     .build();

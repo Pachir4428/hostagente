@@ -1,7 +1,6 @@
 import Queue from 'bull';
 import { createLogger, transports, format } from 'winston';
-import { messageWorker } from './workers/messageWorker';
-import { paymentWorker } from './workers/paymentWorker';
+import { transactionWorker } from './workers/transactionWorker';
 
 const logger = createLogger({
   level: 'info',
@@ -22,24 +21,12 @@ function createQueue(name: string) {
   });
 }
 
-const messageQueue = createQueue('message-processing');
-const paymentQueue = createQueue('payment-confirmation');
-const botStatusQueue = createQueue('bot-status-sync');
+const transactionQueue = createQueue('transaction-processing');
 const notificationQueue = createQueue('notification');
 
-messageQueue.process(async (job) => {
-  logger.info('Processing message job', { id: job.id, data: job.data });
-  return messageWorker(job.data);
-});
-
-paymentQueue.process(async (job) => {
-  logger.info('Processing payment job', { id: job.id, data: job.data });
-  return paymentWorker(job.data);
-});
-
-botStatusQueue.process(async (job) => {
-  logger.info('Processing bot status sync', { id: job.id, data: job.data });
-  return { synced: true, botId: job.data.botId };
+transactionQueue.process(async (job) => {
+  logger.info('Processing transaction job', { id: job.id, data: job.data });
+  return transactionWorker(job.data);
 });
 
 notificationQueue.process(async (job) => {
@@ -47,18 +34,14 @@ notificationQueue.process(async (job) => {
   return { sent: true };
 });
 
-messageQueue.on('failed', (job, err) => logger.error('Message job failed', { id: job.id, err: err.message }));
-paymentQueue.on('failed', (job, err) => logger.error('Payment job failed', { id: job.id, err: err.message }));
+transactionQueue.on('failed', (job, err) =>
+  logger.error('Transaction job failed', { id: job?.id, err: err.message }),
+);
 
 logger.info('Worker started, listening for jobs...', { redis: REDIS_URL });
 
 process.on('SIGTERM', async () => {
   logger.info('Shutting down worker...');
-  await Promise.all([
-    messageQueue.close(),
-    paymentQueue.close(),
-    botStatusQueue.close(),
-    notificationQueue.close(),
-  ]);
+  await Promise.all([transactionQueue.close(), notificationQueue.close()]);
   process.exit(0);
 });
