@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { setToken } from '@/lib/auth';
 import { Logo } from '@/components/Logo';
+import { PasswordInput } from '@/components/PasswordInput';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -113,7 +114,7 @@ export default function RegisterPage() {
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-muted">Palavra-passe</label>
-              <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="field" placeholder="Mínimo 6 caracteres" />
+              <PasswordInput value={password} onChange={setPassword} required minLength={6} autoComplete="new-password" placeholder="Mínimo 6 caracteres" />
             </div>
             <label className="flex items-start gap-2 text-sm text-muted">
               <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} className="mt-1 accent-[#22D3AA]" />

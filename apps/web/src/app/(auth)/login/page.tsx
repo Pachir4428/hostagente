@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { setToken } from '@/lib/auth';
 import { Logo } from '@/components/Logo';
+import { PasswordInput } from '@/components/PasswordInput';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -83,12 +84,11 @@ export default function LoginPage() {
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-muted">Palavra-passe</label>
-              <input
-                type="password"
-                required
+              <PasswordInput
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="field"
+                onChange={setPassword}
+                required
+                autoComplete="current-password"
                 placeholder="••••••••"
               />
             </div>
