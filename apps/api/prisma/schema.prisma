@@ -67,13 +67,15 @@ model Tenant {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  plan         Plan?         @relation(fields: [planId], references: [id])
-  users        User[]
-  products     Product[]
-  transactions Transaction[]
-  apiKeys      ApiKey[]
-  subscription Subscription?
-  invoices     Invoice[]
+  plan          Plan?          @relation(fields: [planId], references: [id])
+  users         User[]
+  products      Product[]
+  transactions  Transaction[]
+  apiKeys       ApiKey[]
+  subscription  Subscription?
+  invoices      Invoice[]
+  notifications Notification[]
+  tickets       SupportTicket[]
 }
 
 model User {
@@ -82,6 +84,7 @@ model User {
   name         String
   passwordHash String
   role         Role     @default(TENANT_ADMIN)
+  canEdit      Boolean  @default(false) // STAFF: can edit vs. view-only
   tenantId     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -158,4 +161,74 @@ model Invoice {
   createdAt DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+enum TicketStatus {
+  open
+  resolved
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  type      String   @default("info") // info | warning | error
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, read])
+}
+
+model SupportTicket {
+  id        String        @id @default(uuid())
+  tenantId  String
+  subject   String
+  status    TicketStatus  @default(open)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages TicketMessage[]
+
+  @@index([tenantId, status])
+}
+
+model TicketMessage {
+  id         String   @id @default(uuid())
+  ticketId   String
+  authorRole Role
+  body       String
+  createdAt  DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+model Coupon {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  discountPct Int       @default(0)
+  active      Boolean   @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorEmail String?
+  actorRole  String?
+  action     String
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Broadcast {
+  id        String   @id @default(uuid())
+  title     String
+  body      String
+  createdAt DateTime @default(now())
 }

@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class TenantsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private audit: AuditService) {}
 
   async list() {
     const tenants = await this.prisma.tenant.findMany({
@@ -58,6 +59,8 @@ export class TenantsService {
   async setStatus(id: string, status: 'active' | 'suspended') {
     const tenant = await this.prisma.tenant.findUnique({ where: { id } });
     if (!tenant) throw new NotFoundException('Tenant não encontrado');
-    return this.prisma.tenant.update({ where: { id }, data: { status } });
+    const updated = await this.prisma.tenant.update({ where: { id }, data: { status } });
+    this.audit.log(null, 'SUPER_ADMIN', `tenant.${status}`, { tenantId: id, name: tenant.name });
+    return updated;
   }
 }

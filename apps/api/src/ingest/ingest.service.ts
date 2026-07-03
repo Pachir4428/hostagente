@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export interface MacroDroidPayload {
   phone: string;
@@ -11,7 +12,10 @@ export interface MacroDroidPayload {
 
 @Injectable()
 export class IngestService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   async ingest(apiKey: string | undefined, payload: MacroDroidPayload) {
     if (!apiKey) throw new UnauthorizedException('API key em falta');
@@ -72,6 +76,15 @@ export class IngestService {
         rawMessage: payload.raw ?? null,
       },
     });
+
+    if (!product) {
+      await this.notifications.create(
+        key.tenantId,
+        'warning',
+        'Pagamento não reconhecido',
+        `Recebido ${payload.amount} MZN (${payload.operator}) de ${payload.phone} sem pacote correspondente.`,
+      );
+    }
 
     await this.touchKey(key.id);
     return tx;
