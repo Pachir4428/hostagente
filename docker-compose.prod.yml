@@ -33,10 +33,13 @@ services:
     restart: always
     environment:
       NODE_ENV: production
-      # Defaults to the local "postgres" container. Set DATABASE_URL/DIRECT_URL
-      # in .env to point to Supabase (or any external Postgres) instead.
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting}
-      DIRECT_URL: ${DIRECT_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting}
+      # Uses the local "postgres" container. To use Supabase / external Postgres
+      # in production, replace both lines below with your DATABASE_URL (pooler,
+      # 6543) and DIRECT_URL (direct, 5432). Do NOT nest ${DATABASE_URL:-...}
+      # here — Compose double-interpolates the default and corrupts passwords
+      # that contain a "$".
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting
+      DIRECT_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting
       # Limit Node.js memory to reduce OOM risk on small VPS (adjust as needed)
       NODE_OPTIONS: "--max-old-space-size=600"
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
@@ -102,8 +105,8 @@ services:
     restart: always
     environment:
       NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting}
-      DIRECT_URL: ${DIRECT_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting
+      DIRECT_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bothosting
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Limit worker process memory (adjust according to workload)
