@@ -34,7 +34,7 @@ export function ThemeToggle({ className = '' }: { className?: string }) {
       aria-label="Alternar tema"
       className={`grid h-9 w-9 place-items-center rounded-lg border border-line text-muted transition hover:text-ink ${className}`}
     >
-      {theme === 'dark' ? '☀' : '☾'}
+      <i className={theme === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon'} aria-hidden="true" />
     </button>
   );
 }

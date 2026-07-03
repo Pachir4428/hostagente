@@ -52,7 +52,7 @@ export function AppShell({
                   : 'text-muted hover:bg-hover hover:text-ink'
               } ${item.soon ? 'cursor-not-allowed opacity-50' : ''}`}
             >
-              <span className="w-5 text-center">{item.icon}</span>
+              <i className={`${item.icon} w-5 text-center`} aria-hidden="true" />
               <span className="flex-1">{item.label}</span>
               {item.soon && <span className="text-[10px] uppercase text-muted2">em breve</span>}
             </span>
@@ -72,7 +72,7 @@ export function AppShell({
           onClick={logout}
           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted transition hover:bg-hover hover:text-ink"
         >
-          <span className="w-5 text-center">⏻</span> Sair
+          <i className="fa-solid fa-right-from-bracket w-5 text-center" aria-hidden="true" /> Sair
         </button>
       </div>
     </div>
@@ -100,7 +100,7 @@ export function AppShell({
               className="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted lg:hidden"
               onClick={() => setOpen(true)}
             >
-              ☰
+              <i className="fa-solid fa-bars" aria-hidden="true" />
             </button>
             <h1 className="font-display text-lg font-bold">{title}</h1>
           </div>
