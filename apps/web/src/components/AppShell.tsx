@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { clearToken } from '@/lib/auth';
 import { Logo } from './Logo';
+import { ThemeToggle } from './ThemeToggle';
 
 export interface NavItem {
   href: string;
@@ -48,7 +49,7 @@ export function AppShell({
               className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
                 active
                   ? 'bg-teal/10 font-medium text-teal'
-                  : 'text-muted hover:bg-white/[0.04] hover:text-ink'
+                  : 'text-muted hover:bg-hover hover:text-ink'
               } ${item.soon ? 'cursor-not-allowed opacity-50' : ''}`}
             >
               <span className="w-5 text-center">{item.icon}</span>
@@ -69,7 +70,7 @@ export function AppShell({
         {email && <p className="truncate px-3 pb-2 text-xs text-muted">{email}</p>}
         <button
           onClick={logout}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted transition hover:bg-white/[0.04] hover:text-ink"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted transition hover:bg-hover hover:text-ink"
         >
           <span className="w-5 text-center">⏻</span> Sair
         </button>
@@ -103,9 +104,12 @@ export function AppShell({
             </button>
             <h1 className="font-display text-lg font-bold">{title}</h1>
           </div>
-          {badge && (
-            <span className="chip border border-line bg-white/[0.03] text-muted">{badge}</span>
-          )}
+          <div className="flex items-center gap-3">
+            {badge && (
+              <span className="chip border border-line bg-hover text-muted">{badge}</span>
+            )}
+            <ThemeToggle />
+          </div>
         </header>
         <main className="min-w-0 flex-1 p-5 sm:p-8">{children}</main>
       </div>

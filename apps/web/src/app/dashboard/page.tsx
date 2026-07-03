@@ -20,10 +20,23 @@ interface Summary {
 export default function TenantDashboard() {
   const { user, loading } = useAuth('TENANT');
   const [data, setData] = useState<Summary | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
     if (!user) return;
-    authApi.get('/dashboard/summary').then((r) => setData(r.data)).catch(() => {});
+    setLoadingData(true);
+    authApi
+      .get('/dashboard/summary')
+      .then((r) => setData(r.data))
+      .catch((e) =>
+        setErr(
+          e.response?.status === 404
+            ? 'A API ainda não tem o endpoint /dashboard/summary. Reconstrói e reinicia o container da API.'
+            : e.response?.data?.message || 'Não foi possível carregar o resumo.',
+        ),
+      )
+      .finally(() => setLoadingData(false));
   }, [user]);
 
   const maxRevenue = Math.max(1, ...(data?.series.map((d) => d.revenue) ?? [1]));
@@ -35,9 +48,14 @@ export default function TenantDashboard() {
       email={user?.email}
       badge={data?.plan ? `◈ Plano ${data.plan}` : undefined}
     >
-      {loading || !data ? (
+      {loading || loadingData ? (
         <div className="flex justify-center py-20">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-teal" />
+        </div>
+      ) : err || !data ? (
+        <div className="card border-danger/30 p-6 text-center">
+          <p className="font-display font-semibold text-danger">Não foi possível carregar o resumo</p>
+          <p className="mt-2 text-sm text-muted">{err ?? 'Sem dados.'}</p>
         </div>
       ) : (
         <div className="space-y-6">

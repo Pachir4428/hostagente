@@ -2,8 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+:root[data-theme='dark'] {
   color-scheme: dark;
+  --c-bg: #0a0711;
+  --c-surface: #16101f;
+  --c-surface2: #100b1a;
+  --c-card: #110c1c;
+  --c-line: rgba(244, 241, 250, 0.08);
+  --c-ink: #f4f1fa;
+  --c-muted: #9c93b3;
+  --c-muted2: #8b819b;
+  --c-hover: rgba(255, 255, 255, 0.05);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --c-bg: #f5f4fa;
+  --c-surface: #ffffff;
+  --c-surface2: #ffffff;
+  --c-card: #ffffff;
+  --c-line: rgba(16, 11, 26, 0.1);
+  --c-ink: #17121f;
+  --c-muted: #6e6683;
+  --c-muted2: #8b819b;
+  --c-hover: rgba(16, 11, 26, 0.04);
 }
 
 body {
@@ -20,14 +43,11 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: #0a0711;
+  background: var(--c-bg);
 }
 ::-webkit-scrollbar-thumb {
-  background: #241b33;
+  background: var(--c-line);
   border-radius: 6px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #322544;
 }
 
 @layer components {
@@ -38,8 +58,8 @@ body {
   }
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line
-           bg-white/[0.03] px-5 py-2.5 font-display font-medium text-ink transition
-           hover:bg-white/[0.06] disabled:opacity-50;
+           bg-hover px-5 py-2.5 font-display font-medium text-ink transition
+           hover:opacity-80 disabled:opacity-50;
   }
   .btn-danger {
     @apply inline-flex items-center justify-center gap-2 rounded-xl border border-danger/30
@@ -52,7 +72,7 @@ body {
            focus:border-teal/50 focus:outline-none focus:ring-2 focus:ring-teal/20;
   }
   .card {
-    @apply rounded-2xl border border-line bg-surface/70 backdrop-blur;
+    @apply rounded-2xl border border-line bg-surface;
   }
   .chip {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;

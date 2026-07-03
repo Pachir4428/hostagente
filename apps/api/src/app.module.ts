@@ -8,6 +8,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { ProductsModule } from './products/products.module';
 import { ApiKeysModule } from './apikeys/apikeys.module';
+import { SubscriptionModule } from './subscription/subscription.module';
 import { IngestModule } from './ingest/ingest.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { PlatformModule } from './platform/platform.module';
@@ -26,6 +27,7 @@ import { SeedModule } from './seed/seed.module';
     TransactionsModule,
     ProductsModule,
     ApiKeysModule,
+    SubscriptionModule,
     // MacroDroid ingestion
     IngestModule,
     // Super Admin panel

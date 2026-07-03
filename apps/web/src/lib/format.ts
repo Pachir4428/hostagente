@@ -18,7 +18,7 @@ export const TX_STATUS: Record<string, { label: string; chip: string }> = {
   delivered: { label: 'Entregue', chip: 'bg-teal/10 text-teal border border-teal/25' },
   refused: { label: 'Recusado', chip: 'bg-danger/10 text-danger border border-danger/25' },
   duplicate: { label: 'Duplicado', chip: 'bg-gold/10 text-gold border border-gold/25' },
-  pending: { label: 'Pendente', chip: 'bg-white/[0.05] text-muted border border-line' },
+  pending: { label: 'Pendente', chip: 'bg-hover text-muted border border-line' },
 };
 
 export const OPERATOR_LABEL: Record<string, string> = {

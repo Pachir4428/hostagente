@@ -23,7 +23,7 @@ const STATUS_CHIP: Record<string, string> = {
   trial: 'bg-gold/10 text-gold border border-gold/25',
   past_due: 'bg-danger/10 text-danger border border-danger/25',
   suspended: 'bg-danger/10 text-danger border border-danger/25',
-  cancelled: 'bg-white/[0.05] text-muted border border-line',
+  cancelled: 'bg-hover text-muted border border-line',
 };
 
 export default function AdminTenantsPage() {

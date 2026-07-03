@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { getToken } from '@/lib/auth';
 import { Logo } from '@/components/Logo';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const features = [
   { icon: '⚡', title: 'Deteção automática', desc: 'O MacroDroid lê o SMS de M-Pesa/e-Mola e a venda é registada em segundos, sem toques.' },
@@ -58,6 +59,7 @@ export default function Home() {
             <a href="#pricing" className="transition hover:text-ink">Planos</a>
           </nav>
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             {authed ? (
               <Link href="/dashboard" className="btn-primary text-sm">Painel</Link>
             ) : (
@@ -74,7 +76,7 @@ export default function Home() {
 
       {/* Hero */}
       <section className="mx-auto max-w-6xl px-5 pt-20 pb-16 text-center">
-        <span className="chip mx-auto border border-line bg-white/[0.03] text-muted">
+        <span className="chip mx-auto border border-line bg-hover text-muted">
           Feito para Moçambique · M-Pesa · e-Mola · mKesh
         </span>
         <h1 className="mx-auto mt-6 max-w-4xl font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl">
@@ -123,7 +125,7 @@ export default function Home() {
       {/* How it works */}
       <section id="how" className="mx-auto max-w-6xl px-5 py-20">
         <div className="text-center">
-          <h2 className="font-display text-3xl font-bold sm:text-4xl">Do zero ao bot online em 4 passos</h2>
+          <h2 className="font-display text-3xl font-bold sm:text-4xl">Do zero a vender em 4 passos</h2>
           <p className="mt-3 text-muted">Simples.</p>
         </div>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

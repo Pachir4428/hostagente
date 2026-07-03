@@ -104,7 +104,7 @@ export default function ProductsPage() {
             <div key={p.id} className={`card p-5 ${!p.active ? 'opacity-60' : ''}`}>
               <div className="flex items-start justify-between">
                 <span className="font-display text-2xl font-bold text-teal">{mzn(p.amount)}</span>
-                <span className="chip border border-line bg-white/[0.03] text-muted">
+                <span className="chip border border-line bg-hover text-muted">
                   {p.operator ? OPERATOR_LABEL[p.operator] : 'Todas'}
                 </span>
               </div>
