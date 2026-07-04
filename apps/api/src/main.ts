@@ -13,8 +13,12 @@ async function bootstrap() {
   app.use(compression());
   app.use(cookieParser());
 
+  // Reflect the requesting origin so the panel works whether it's served from
+  // localhost, an IP (http://SEU_IP:3001) or a domain — no exact FRONTEND_URL
+  // match needed. Auth is Bearer-token based and the refresh cookie is
+  // SameSite=lax, so reflecting the origin is safe for this setup.
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    origin: true,
     credentials: true,
   });
 
