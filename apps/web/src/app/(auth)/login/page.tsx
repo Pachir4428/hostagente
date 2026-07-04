@@ -24,7 +24,14 @@ export default function LoginPage() {
       setToken(res.data.accessToken);
       router.replace(res.data.user?.role === 'SUPER_ADMIN' ? '/admin' : '/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Não foi possível entrar. Verifica os dados.');
+      if (!err.response) {
+        // No HTTP response = the API is unreachable (down / wrong URL / CORS).
+        setError('Servidor indisponível. A API não respondeu — verifica se está a correr.');
+      } else if (err.response.status === 401) {
+        setError('Email ou palavra-passe incorretos. Se ainda não tens conta, cria uma.');
+      } else {
+        setError(err.response?.data?.message || `Erro ${err.response.status}. Tenta novamente.`);
+      }
     } finally {
       setLoading(false);
     }
@@ -41,11 +48,11 @@ export default function LoginPage() {
         <Logo />
         <div>
           <h2 className="font-display text-4xl font-bold leading-tight">
-            Os teus bots,<br />
-            <span className="text-teal">sempre a trabalhar.</span>
+            As tuas vendas,<br />
+            <span className="text-teal">no automático.</span>
           </h2>
           <p className="mt-4 max-w-sm text-muted">
-            Automatiza o teu WhatsApp com IA e paga em meticais.
+            Deteta pagamentos M-Pesa e e-Mola e entrega pacotes de dados sozinho.
           </p>
         </div>
         <p className="text-sm text-muted">
@@ -63,7 +70,7 @@ export default function LoginPage() {
             <Logo />
           </div>
           <h1 className="font-display text-3xl font-bold">Bem-vindo de volta</h1>
-          <p className="mt-2 text-muted">Entra para gerir os teus bots.</p>
+          <p className="mt-2 text-muted">Entra para gerir as tuas vendas.</p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
             {error && (
