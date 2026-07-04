@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/roles.guard';
 import { Roles } from '../common/roles.decorator';
@@ -75,5 +87,25 @@ export class BotsController {
     @Body() body: { content: string },
   ) {
     return this.service.saveScript(user.tenantId!, id, body.content ?? '');
+  }
+
+  @Post(':id/upload')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
+  upload(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @UploadedFile() file: { buffer: Buffer; originalname: string },
+  ) {
+    return this.service.saveProjectZip(user.tenantId!, id, file.buffer);
+  }
+
+  @Post(':id/command')
+  command(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { command: string }) {
+    return this.service.sendCommand(user.tenantId!, id, body.command ?? '');
+  }
+
+  @Post(':id/stdin')
+  stdin(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { input: string }) {
+    return this.service.sendStdin(user.tenantId!, id, body.input ?? '');
   }
 }

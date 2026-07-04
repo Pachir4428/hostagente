@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 const RUNNER_URL = process.env.RUNNER_INTERNAL_URL || 'http://bot-runner:4001';
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || '';
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-const SCRIPTS_DIR = process.env.SCRIPTS_DIR || '/data/scripts';
+const PROJECTS_DIR = process.env.PROJECTS_DIR || '/data/projects';
 
 @Injectable()
 export class BotsService {
@@ -143,9 +143,10 @@ export class BotsService {
     }
   }
 
+  /** Save a single-file bot (bot.js) into the project dir. */
   async saveScript(tenantId: string, id: string, content: string) {
     await this.get(tenantId, id);
-    const dir = path.join(SCRIPTS_DIR, id);
+    const dir = path.join(PROJECTS_DIR, id);
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, 'bot.js'), content, 'utf8');
     await this.prisma.bot.update({ where: { id }, data: { hasScript: true } });
@@ -155,10 +156,42 @@ export class BotsService {
   async getScript(tenantId: string, id: string) {
     await this.get(tenantId, id);
     try {
-      const content = await fs.readFile(path.join(SCRIPTS_DIR, id, 'bot.js'), 'utf8');
+      const content = await fs.readFile(path.join(PROJECTS_DIR, id, 'bot.js'), 'utf8');
       return { content };
     } catch {
       return { content: '' };
+    }
+  }
+
+  /** Save an uploaded project ZIP; the engine extracts it on next start. */
+  async saveProjectZip(tenantId: string, id: string, buffer: Buffer) {
+    await this.get(tenantId, id);
+    const dir = path.join(PROJECTS_DIR, id);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'project.zip'), buffer);
+    await this.prisma.bot.update({ where: { id }, data: { hasScript: true } });
+    return { success: true, message: 'Projeto carregado. Inicia (ou reinicia) o bot para instalar e correr.' };
+  }
+
+  /** Run a shell command inside the bot's container (streamed to the console). */
+  async sendCommand(tenantId: string, id: string, command: string) {
+    await this.get(tenantId, id);
+    try {
+      await this.redis.publish(`bot:${id}:cmd`, command);
+      return { success: true };
+    } catch {
+      return { success: false, message: 'Redis indisponível — o bot precisa de estar a correr.' };
+    }
+  }
+
+  /** Forward a line to the running process stdin. */
+  async sendStdin(tenantId: string, id: string, input: string) {
+    await this.get(tenantId, id);
+    try {
+      await this.redis.publish(`bot:${id}:stdin`, input);
+      return { success: true };
+    } catch {
+      return { success: false };
     }
   }
 

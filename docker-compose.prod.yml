@@ -58,10 +58,10 @@ services:
       SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-}
       APP_VERSION: ${APP_VERSION:-1.0.0}
       # Where the API writes tenant bot scripts; shared with bot-runner/engine.
-      SCRIPTS_DIR: /data/scripts
+      PROJECTS_DIR: /data/projects
     volumes:
       - uploads-data:/app/uploads
-      - scripts-data:/data/scripts
+      - projects-data:/data/projects
     ports:
       - "3000:3000"
     depends_on:
@@ -87,7 +87,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - session-data:/data/sessions
-      - scripts-data:/data/scripts
+      - projects-data:/data/projects
     environment:
       NODE_ENV: production
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
@@ -158,5 +158,5 @@ volumes:
   # the api/bot-runner services mount.
   session-data:
     name: session-data
-  scripts-data:
-    name: scripts-data
+  projects-data:
+    name: projects-data

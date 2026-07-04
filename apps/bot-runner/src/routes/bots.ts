@@ -44,7 +44,7 @@ botRoutes.post('/stop', async (req: Request, res: Response) => {
 });
 
 botRoutes.get('/status/:botId', async (req: Request, res: Response) => {
-  const { botId } = req.params;
+  const botId = String(req.params.botId);
   try {
     const status = await dockerService.getBotStatus(botId);
     res.json(status);

@@ -46,9 +46,9 @@ export const dockerService = {
           RestartPolicy: { Name: 'unless-stopped' },
           NetworkMode: 'bot-network',
           Memory: 256 * 1024 * 1024,
-          // session-data holds WhatsApp auth per bot; scripts-data holds the
-          // tenant's uploaded bot.js (written by the API).
-          Binds: ['session-data:/data/sessions', 'scripts-data:/data/scripts'],
+          // projects-data holds each bot's uploaded Node project (written by
+          // the API); the engine extracts/installs/runs it from /data/projects.
+          Binds: ['projects-data:/data/projects'],
         },
         Labels: {
           'bot-platform': 'true',

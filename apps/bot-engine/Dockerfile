@@ -1,6 +1,9 @@
 FROM node:20-alpine
 
-# Baileys talks to WhatsApp over websockets — no Chromium/puppeteer needed.
+# Generic Node project runner for uploaded Baileys bots.
+# unzip: extract uploaded project ZIPs. git: some npm deps install from git.
+RUN apk add --no-cache unzip git
+
 WORKDIR /app
 
 COPY package.json ./
@@ -8,6 +11,6 @@ RUN npm install --omit=dev
 
 COPY src ./src/
 
-RUN mkdir -p /data/sessions /data/scripts
+RUN mkdir -p /data/projects
 
 CMD ["node", "src/index.js"]
