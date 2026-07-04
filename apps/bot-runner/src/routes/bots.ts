@@ -4,12 +4,26 @@ import { dockerService } from '../services/dockerService';
 export const botRoutes = Router();
 
 botRoutes.post('/start', async (req: Request, res: Response) => {
-  const { botId } = req.body;
+  const { botId, phone } = req.body;
   if (!botId) {
     return res.status(400).json({ error: 'botId is required' });
   }
   try {
-    const result = await dockerService.startBot(botId);
+    const result = await dockerService.startBot(botId, { phone });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+botRoutes.post('/restart', async (req: Request, res: Response) => {
+  const { botId, phone } = req.body;
+  if (!botId) {
+    return res.status(400).json({ error: 'botId is required' });
+  }
+  try {
+    await dockerService.stopBot(botId);
+    const result = await dockerService.startBot(botId, { phone });
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });

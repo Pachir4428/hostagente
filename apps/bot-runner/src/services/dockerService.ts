@@ -17,7 +17,10 @@ function containerName(botId: string): string {
 }
 
 export const dockerService = {
-  async startBot(botId: string): Promise<{ success: boolean; containerId?: string; message?: string }> {
+  async startBot(
+    botId: string,
+    opts: { phone?: string } = {},
+  ): Promise<{ success: boolean; containerId?: string; message?: string }> {
     const name = containerName(botId);
 
     // Remove existing container if any
@@ -36,13 +39,16 @@ export const dockerService = {
         Env: [
           `BOT_ID=${botId}`,
           `REDIS_URL=${REDIS_URL}`,
+          `PHONE=${opts.phone || ''}`,
           `NODE_ENV=${process.env.NODE_ENV || 'production'}`,
         ],
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
           NetworkMode: 'bot-network',
           Memory: 256 * 1024 * 1024,
-          Binds: [`session-data:/data/sessions`],
+          // session-data holds WhatsApp auth per bot; scripts-data holds the
+          // tenant's uploaded bot.js (written by the API).
+          Binds: ['session-data:/data/sessions', 'scripts-data:/data/scripts'],
         },
         Labels: {
           'bot-platform': 'true',

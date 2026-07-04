@@ -43,6 +43,19 @@ enum Operator {
   mkesh
 }
 
+enum BotType {
+  auto // MacroDroid payment detection (no WhatsApp process)
+  manual // Baileys WhatsApp bot running on the VPS
+}
+
+enum BotStatus {
+  stopped
+  starting
+  waiting_qr
+  connected
+  error
+}
+
 model Plan {
   id              String   @id @default(uuid())
   name            String   @unique
@@ -76,6 +89,7 @@ model Tenant {
   invoices      Invoice[]
   notifications Notification[]
   tickets       SupportTicket[]
+  bots          Bot[]
 }
 
 model User {
@@ -231,4 +245,22 @@ model Broadcast {
   title     String
   body      String
   createdAt DateTime @default(now())
+}
+
+model Bot {
+  id          String    @id @default(uuid())
+  tenantId    String
+  name        String
+  type        BotType   @default(manual)
+  status      BotStatus @default(stopped)
+  phoneNumber String? // for pairing-code login (optional)
+  containerId String?
+  hasScript   Boolean   @default(false) // whether a bot script was uploaded
+  config      Json? // arbitrary bot config (welcome message, commands, etc.)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
 }

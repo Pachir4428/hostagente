@@ -1,121 +1,174 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+/**
+ * HostAgente Baileys bot engine — one container per manual bot.
+ *
+ * Connects to WhatsApp via Baileys, publishes QR / pairing code / status /
+ * logs to Redis (read by the API for the bot console), and runs the tenant's
+ * uploaded script (/data/scripts/{BOT_ID}/bot.js) if present.
+ *
+ * Env: BOT_ID, REDIS_URL, PHONE (optional, for pairing-code login).
+ */
+const fs = require('fs');
+const path = require('path');
+const pino = require('pino');
 const Redis = require('ioredis');
-const express = require('express');
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+} = require('@whiskeysockets/baileys');
 
-const BOT_ID = process.env.BOT_ID || 'default-bot';
+const BOT_ID = process.env.BOT_ID;
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const PHONE = (process.env.PHONE || '').replace(/[^0-9]/g, '');
 
-const redis = new Redis(REDIS_URL);
-const redisPub = new Redis(REDIS_URL);
-
-const app = express();
-app.use(express.json());
-
-let botStatus = 'starting';
-let currentQR = null;
-
-app.get('/health', (req, res) => {
-  res.json({ status: botStatus, botId: BOT_ID });
-});
-
-app.listen(5000, () => {
-  console.log(`Bot engine ${BOT_ID} health endpoint on port 5000`);
-});
-
-async function publishStatus(status, extra = {}) {
-  botStatus = status;
-  const event = JSON.stringify({ botId: BOT_ID, status, timestamp: new Date().toISOString(), ...extra });
-  await redisPub.publish('bot:status', event);
-  await redis.set(`bot:${BOT_ID}:status`, status);
-  console.log(`Bot ${BOT_ID} status: ${status}`);
+if (!BOT_ID) {
+  console.error('BOT_ID is required');
+  process.exit(1);
 }
 
-const client = new Client({
-  authStrategy: new LocalAuth({
-    clientId: BOT_ID,
-    dataPath: `/data/sessions`,
-  }),
-  puppeteer: {
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process',
-      '--disable-gpu',
-    ],
-  },
-});
+const redis = new Redis(REDIS_URL);
+const K = {
+  status: `bot:${BOT_ID}:status`,
+  qr: `bot:${BOT_ID}:qr`,
+  pairing: `bot:${BOT_ID}:pairing`,
+  logs: `bot:${BOT_ID}:logs`,
+};
 
-client.on('qr', async (qr) => {
-  currentQR = qr;
-  qrcode.generate(qr, { small: true });
-  await publishStatus('waiting_qr', { qrCode: qr });
-  await redisPub.publish(`bot:${BOT_ID}:qr`, JSON.stringify({ botId: BOT_ID, qrCode: qr }));
-});
-
-client.on('ready', async () => {
-  currentQR = null;
-  await publishStatus('running');
-  console.log(`Bot ${BOT_ID} is ready`);
-});
-
-client.on('authenticated', async () => {
-  await publishStatus('authenticated');
-});
-
-client.on('auth_failure', async (msg) => {
-  await publishStatus('error', { message: msg });
-});
-
-client.on('disconnected', async (reason) => {
-  await publishStatus('stopped', { reason });
-  console.log(`Bot ${BOT_ID} disconnected: ${reason}`);
-});
-
-client.on('message', async (message) => {
-  const from = message.from;
-  const body = message.body;
-
-  console.log(`Message from ${from}: ${body}`);
-
-  // Publish message event for worker processing
-  await redisPub.publish('bot:message', JSON.stringify({
-    botId: BOT_ID,
-    from,
-    body,
-    timestamp: Date.now(),
-  }));
-
-  // Simple auto-reply
-  const lower = body.toLowerCase().trim();
-  if (lower === 'ping') {
-    await message.reply('pong');
-  } else if (lower === 'hi' || lower === 'hello') {
-    await message.reply('Hello! I am your WhatsApp bot. How can I help?');
+async function log(line) {
+  const entry = `[${new Date().toISOString()}] ${line}`;
+  console.log(entry);
+  try {
+    await redis.rpush(K.logs, entry);
+    await redis.ltrim(K.logs, -200, -1); // keep last 200 lines
+    await redis.expire(K.logs, 60 * 60 * 24);
+  } catch {
+    /* ignore */
   }
-});
+}
+
+async function setStatus(status) {
+  try {
+    await redis.set(K.status, status, 'EX', 60 * 60 * 24);
+  } catch {
+    /* ignore */
+  }
+}
+
+const SESSION_DIR = `/data/sessions/${BOT_ID}`;
+const SCRIPT_PATH = `/data/scripts/${BOT_ID}/bot.js`;
+
+function loadUserScript() {
+  try {
+    if (fs.existsSync(SCRIPT_PATH)) {
+      // Fresh require each start.
+      delete require.cache[require.resolve(SCRIPT_PATH)];
+      const mod = require(SCRIPT_PATH);
+      if (typeof mod === 'function') return mod;
+      if (mod && typeof mod.default === 'function') return mod.default;
+      log('Uploaded script has no default export function — ignoring.');
+    }
+  } catch (err) {
+    log(`Failed to load uploaded script: ${err.message}`);
+  }
+  return null;
+}
 
 async function start() {
-  await publishStatus('starting');
-  client.initialize();
+  fs.mkdirSync(SESSION_DIR, { recursive: true });
+  await setStatus('starting');
+  await log('Bot engine a iniciar…');
+
+  const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+  const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
+
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: false,
+    logger: pino({ level: 'silent' }),
+    browser: ['HostAgente', 'Chrome', '1.0.0'],
+  });
+
+  // Pairing-code login (if a phone number was provided and we're not registered).
+  if (PHONE && !sock.authState.creds.registered) {
+    setTimeout(async () => {
+      try {
+        const code = await sock.requestPairingCode(PHONE);
+        await redis.set(K.pairing, code, 'EX', 300);
+        await log(`Código de emparelhamento: ${code}`);
+      } catch (err) {
+        await log(`Falha ao gerar código de emparelhamento: ${err.message}`);
+      }
+    }, 3000);
+  }
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+    if (qr) {
+      await redis.set(K.qr, qr, 'EX', 120);
+      await setStatus('waiting_qr');
+      await log('QR code gerado — lê no WhatsApp.');
+    }
+    if (connection === 'open') {
+      await redis.del(K.qr);
+      await redis.del(K.pairing);
+      await setStatus('connected');
+      await log('✅ Ligado ao WhatsApp.');
+    }
+    if (connection === 'close') {
+      const code = lastDisconnect?.error?.output?.statusCode;
+      const loggedOut = code === DisconnectReason.loggedOut;
+      await setStatus(loggedOut ? 'stopped' : 'error');
+      await log(`Ligação fechada (${code}).${loggedOut ? ' Sessão terminada.' : ' A reconectar…'}`);
+      if (!loggedOut) {
+        setTimeout(() => start().catch((e) => log(`Erro a reconectar: ${e.message}`)), 3000);
+      }
+    }
+  });
+
+  // Default + custom message handling.
+  const userScript = loadUserScript();
+  let config = {};
+  try {
+    const raw = await redis.get(`bot:${BOT_ID}:config`);
+    if (raw) config = JSON.parse(raw);
+  } catch {
+    /* ignore */
+  }
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
+    for (const msg of messages) {
+      if (msg.key.fromMe) continue;
+      try {
+        if (userScript) {
+          await userScript(sock, msg, { config, log });
+        } else if (config.welcomeMessage) {
+          const jid = msg.key.remoteJid;
+          const text = (msg.message?.conversation || msg.message?.extendedTextMessage?.text || '').trim();
+          if (text) await sock.sendMessage(jid, { text: config.welcomeMessage });
+        }
+      } catch (err) {
+        await log(`Erro ao processar mensagem: ${err.message}`);
+      }
+    }
+  });
+
+  if (userScript) await log('Script personalizado carregado.');
+  else await log('Sem script personalizado — a usar resposta automática (welcomeMessage).');
 }
 
 start().catch(async (err) => {
-  console.error('Failed to start bot engine:', err);
-  await publishStatus('error', { message: err.message });
+  await log(`Erro fatal: ${err.message}`);
+  await setStatus('error');
   process.exit(1);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('Shutting down bot engine...');
-  await publishStatus('stopped');
-  await client.destroy();
-  await redis.quit();
-  await redisPub.quit();
+  await setStatus('stopped');
+  await log('Bot engine a encerrar.');
   process.exit(0);
 });

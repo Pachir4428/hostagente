@@ -10,6 +10,7 @@ import { TransactionsModule } from './transactions/transactions.module';
 import { ProductsModule } from './products/products.module';
 import { ApiKeysModule } from './apikeys/apikeys.module';
 import { SubscriptionModule } from './subscription/subscription.module';
+import { BotsModule } from './bots/bots.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TeamModule } from './team/team.module';
 import { SupportModule } from './support/support.module';
@@ -36,6 +37,7 @@ import { SeedModule } from './seed/seed.module';
     ProductsModule,
     ApiKeysModule,
     SubscriptionModule,
+    BotsModule,
     NotificationsModule,
     TeamModule,
     SupportModule,
