@@ -170,8 +170,16 @@ export class BotsService {
       throw new BadRequestException('Nenhum ficheiro recebido.');
     }
     const dir = path.join(PROJECTS_DIR, id);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, 'project.zip'), buffer);
+    try {
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, 'project.zip'), buffer);
+    } catch (err: any) {
+      this.logger.error(`saveProjectZip ${id}: ${err?.message}`);
+      throw new BadRequestException(
+        `Não foi possível guardar o ficheiro em ${dir}: ${err?.code || err?.message}. ` +
+          `Confirma que a pasta de projetos (PROJECTS_DIR) está montada e com permissão de escrita.`,
+      );
+    }
     await this.prisma.bot.update({ where: { id }, data: { hasScript: true } });
     return { success: true, message: 'Projeto carregado. Inicia (ou reinicia) o bot para descompactar e correr.' };
   }
@@ -268,12 +276,20 @@ export class BotsService {
   ) {
     await this.get(tenantId, id);
     let count = 0;
-    for (const f of files) {
-      if (!f.rel) continue;
-      const p = this.safe(id, f.rel);
-      await fs.mkdir(path.dirname(p), { recursive: true });
-      await fs.writeFile(p, f.buffer);
-      count++;
+    try {
+      for (const f of files) {
+        if (!f.rel) continue;
+        const p = this.safe(id, f.rel);
+        await fs.mkdir(path.dirname(p), { recursive: true });
+        await fs.writeFile(p, f.buffer);
+        count++;
+      }
+    } catch (err: any) {
+      this.logger.error(`saveFiles ${id}: ${err?.message}`);
+      throw new BadRequestException(
+        `Falha ao guardar ficheiros: ${err?.code || err?.message}. ` +
+          `Confirma que a pasta de projetos está montada e com permissão de escrita.`,
+      );
     }
     if (count > 0) await this.prisma.bot.update({ where: { id }, data: { hasScript: true } }).catch(() => null);
     return { success: true, count };
