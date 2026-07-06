@@ -6,11 +6,13 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/roles.guard';
 import { Roles } from '../common/roles.decorator';
@@ -90,13 +92,51 @@ export class BotsController {
   }
 
   @Post(':id/upload')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 100 * 1024 * 1024 } }))
   upload(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @UploadedFile() file: { buffer: Buffer; originalname: string },
+    @UploadedFile() file?: { buffer: Buffer; originalname: string },
   ) {
-    return this.service.saveProjectZip(user.tenantId!, id, file.buffer);
+    return this.service.saveProjectZip(user.tenantId!, id, file?.buffer);
+  }
+
+  // Folder / multiple-file upload. Each file's relative path comes from its
+  // multipart field name (the frontend uses webkitRelativePath).
+  @Post(':id/files')
+  @UseInterceptors(AnyFilesInterceptor({ limits: { fileSize: 100 * 1024 * 1024, files: 500 } }))
+  uploadFiles(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @UploadedFiles() files: Array<{ buffer: Buffer; originalname: string; fieldname: string }>,
+  ) {
+    const mapped = (files || []).map((f) => ({ rel: f.fieldname || f.originalname, buffer: f.buffer }));
+    return this.service.saveFiles(user.tenantId!, id, mapped);
+  }
+
+  // ── File manager ──
+  @Get(':id/files')
+  listFiles(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.service.listFiles(user.tenantId!, id);
+  }
+
+  @Get(':id/file')
+  readFile(@CurrentUser() user: AuthUser, @Param('id') id: string, @Query('path') p: string) {
+    return this.service.readFile(user.tenantId!, id, p || '');
+  }
+
+  @Post(':id/file')
+  writeFile(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: { path: string; content: string },
+  ) {
+    return this.service.writeFileContent(user.tenantId!, id, body.path, body.content ?? '');
+  }
+
+  @Delete(':id/file')
+  deleteFile(@CurrentUser() user: AuthUser, @Param('id') id: string, @Query('path') p: string) {
+    return this.service.deletePath(user.tenantId!, id, p || '');
   }
 
   @Post(':id/command')

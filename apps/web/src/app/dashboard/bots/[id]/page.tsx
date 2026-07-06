@@ -13,12 +13,12 @@ interface Bot {
   name: string;
   type: 'auto' | 'manual';
   status: string;
-  phoneNumber?: string | null;
   hasScript: boolean;
 }
-interface Live {
-  status: string;
-  logs: string[];
+interface FileNode {
+  path: string;
+  type: 'file' | 'dir';
+  size: number;
 }
 
 const STATUS: Record<string, { label: string; chip: string; dot: string }> = {
@@ -36,11 +36,15 @@ export default function BotConsolePage() {
   const id = params.id as string;
 
   const [bot, setBot] = useState<Bot | null>(null);
-  const [live, setLive] = useState<Live>({ status: 'stopped', logs: [] });
+  const [status, setStatus] = useState('stopped');
+  const [logs, setLogs] = useState<string[]>([]);
   const [busy, setBusy] = useState('');
   const [cmd, setCmd] = useState('');
-  const [uploadName, setUploadName] = useState('');
+  const [files, setFiles] = useState<FileNode[]>([]);
+  const [editing, setEditing] = useState<{ path: string; content: string } | null>(null);
+  const [savingFile, setSavingFile] = useState(false);
   const logsRef = useRef<HTMLDivElement>(null);
+  const cmdHistory = useRef<string[]>([]);
 
   async function loadBot() {
     const res = await authApi.get(`/bots/${id}`);
@@ -49,7 +53,16 @@ export default function BotConsolePage() {
   async function loadLive() {
     try {
       const res = await authApi.get(`/bots/${id}/live`);
-      setLive(res.data);
+      setStatus(res.data.status);
+      setLogs(res.data.logs || []);
+    } catch {
+      /* ignore */
+    }
+  }
+  async function loadFiles() {
+    try {
+      const res = await authApi.get(`/bots/${id}/files`);
+      setFiles(res.data);
     } catch {
       /* ignore */
     }
@@ -59,6 +72,7 @@ export default function BotConsolePage() {
     if (!user) return;
     loadBot();
     loadLive();
+    loadFiles();
     const iv = setInterval(loadLive, 2000);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,7 +80,7 @@ export default function BotConsolePage() {
 
   useEffect(() => {
     if (logsRef.current) logsRef.current.scrollTop = logsRef.current.scrollHeight;
-  }, [live.logs]);
+  }, [logs]);
 
   async function control(action: 'start' | 'stop' | 'restart') {
     setBusy(action);
@@ -75,6 +89,7 @@ export default function BotConsolePage() {
       if (res.data?.success === false) alert(res.data.message || 'Falhou');
       await loadBot();
       await loadLive();
+      setTimeout(loadFiles, 1500);
     } catch (e: any) {
       alert(e.response?.data?.message || 'Erro ao controlar o bot');
     } finally {
@@ -82,10 +97,10 @@ export default function BotConsolePage() {
     }
   }
 
-  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function uploadZip(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    setUploadName(file.name);
     setBusy('upload');
     try {
       const fd = new FormData();
@@ -93,6 +108,7 @@ export default function BotConsolePage() {
       const res = await authApi.post(`/bots/${id}/upload`, fd);
       alert(res.data?.message || 'Projeto carregado.');
       await loadBot();
+      setTimeout(loadFiles, 500);
     } catch (e: any) {
       alert(e.response?.data?.message || 'Falha no upload');
     } finally {
@@ -100,14 +116,62 @@ export default function BotConsolePage() {
     }
   }
 
+  async function uploadMany(e: React.ChangeEvent<HTMLInputElement>) {
+    const list = e.target.files;
+    e.target.value = '';
+    if (!list || list.length === 0) return;
+    setBusy('upload');
+    try {
+      const fd = new FormData();
+      for (const f of Array.from(list)) {
+        const rel = (f as any).webkitRelativePath || f.name;
+        fd.append(rel, f, f.name);
+      }
+      const res = await authApi.post(`/bots/${id}/files`, fd);
+      alert(`${res.data?.count ?? 0} ficheiro(s) carregado(s).`);
+      await loadBot();
+      loadFiles();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Falha no upload');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function openFile(path: string) {
+    const res = await authApi.get(`/bots/${id}/file`, { params: { path } });
+    if (res.data.tooLarge) return alert('Ficheiro demasiado grande para editar.');
+    setEditing({ path, content: res.data.content || '' });
+  }
+  async function saveFile() {
+    if (!editing) return;
+    setSavingFile(true);
+    try {
+      await authApi.post(`/bots/${id}/file`, { path: editing.path, content: editing.content });
+      setEditing(null);
+      loadFiles();
+    } finally {
+      setSavingFile(false);
+    }
+  }
+  async function deleteFile(path: string) {
+    if (!confirm(`Apagar ${path}?`)) return;
+    await authApi.delete(`/bots/${id}/file`, { params: { path } });
+    loadFiles();
+  }
+
   async function sendCommand() {
     const c = cmd.trim();
     if (!c) return;
+    cmdHistory.current.push(c);
     setCmd('');
-    setLive((prev) => ({ ...prev, logs: [...prev.logs, `$ ${c}`] }));
+    setLogs((prev) => [...prev, `$ ${c}`]);
     try {
       const res = await authApi.post(`/bots/${id}/command`, { command: c });
-      if (res.data?.success === false) alert(res.data.message || 'O bot precisa de estar a correr.');
+      if (res.data?.success === false) {
+        setLogs((prev) => [...prev, res.data.message || 'O bot precisa de estar a correr.']);
+      }
+      setTimeout(loadFiles, 1500);
     } catch {
       /* ignore */
     }
@@ -127,8 +191,8 @@ export default function BotConsolePage() {
     );
   }
 
-  const s = st(live.status || bot.status);
-  const running = ['connected', 'starting'].includes(live.status);
+  const s = st(status || bot.status);
+  const running = ['connected', 'starting'].includes(status);
 
   return (
     <AppShell nav={TENANT_NAV} title={bot.name} email={user?.email}>
@@ -136,13 +200,14 @@ export default function BotConsolePage() {
         <i className="fa-solid fa-arrow-left" /> Voltar aos bots
       </Link>
 
+      {/* Controls */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className={`chip ${s.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />{s.label}</span>
           <span className="text-sm text-muted">{bot.type === 'manual' ? 'Manual (projeto Node/Baileys)' : 'Automático (MacroDroid)'}</span>
         </div>
         {bot.type === 'manual' && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {!running ? (
               <button onClick={() => control('start')} disabled={!!busy} className="btn-primary"><i className="fa-solid fa-play" /> Iniciar</button>
             ) : (
@@ -163,63 +228,102 @@ export default function BotConsolePage() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
-          {/* Project / upload */}
-          <div className="space-y-6">
-            <div className="card p-6">
-              <h2 className="font-display text-lg font-semibold">Projeto do bot</h2>
-              <p className="mt-1 text-xs text-muted">
-                Carrega o teu projeto Node/Baileys (ZIP com <code className="text-teal">package.json</code>).
-                Ao iniciar, a plataforma descompacta, corre <code className="text-teal">npm install</code> e
-                arranca o bot. O QR / código aparece na consola à direita.
-              </p>
-              <label className="btn-primary mt-4 w-full cursor-pointer">
-                <i className="fa-solid fa-file-zipper" /> {busy === 'upload' ? 'A carregar…' : 'Carregar ZIP'}
-                <input type="file" accept=".zip" onChange={onUpload} className="hidden" />
-              </label>
-              {uploadName && <p className="mt-2 truncate text-xs text-muted">{uploadName}</p>}
-              <div className="mt-3 flex items-center gap-2 text-xs">
-                <span className={bot.hasScript ? 'text-teal' : 'text-muted'}>
-                  <i className={`fa-solid ${bot.hasScript ? 'fa-circle-check' : 'fa-circle'} mr-1`} />
-                  {bot.hasScript ? 'Projeto carregado' : 'Sem projeto ainda'}
-                </span>
-              </div>
+        <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
+          {/* File manager */}
+          <div className="card flex max-h-[600px] flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-line px-3 py-2.5">
+              <span className="font-display text-sm font-semibold"><i className="fa-solid fa-folder-tree mr-2 text-teal" />Ficheiros</span>
+              <button onClick={loadFiles} className="text-xs text-muted hover:text-ink" title="Atualizar"><i className="fa-solid fa-rotate" /></button>
             </div>
-
-            <div className="card p-5 text-xs text-muted">
-              <p className="font-display text-sm font-semibold text-ink">Dicas</p>
-              <ul className="mt-2 list-disc space-y-1 pl-4">
-                <li>O ZIP deve ter o <code className="text-teal">package.json</code> na raiz.</li>
-                <li>Ligação por QR ou código é feita pelo teu próprio projeto — vê a consola.</li>
-                <li>Podes correr comandos (ex: scripts de setup) no terminal abaixo.</li>
-              </ul>
+            <div className="flex flex-wrap gap-1.5 border-b border-line p-2">
+              <label className="btn-ghost cursor-pointer !px-2.5 !py-1 text-xs" title="ZIP do projeto">
+                <i className="fa-solid fa-file-zipper" /> ZIP
+                <input type="file" accept=".zip" onChange={uploadZip} className="hidden" />
+              </label>
+              <label className="btn-ghost cursor-pointer !px-2.5 !py-1 text-xs" title="Ficheiros">
+                <i className="fa-solid fa-file" /> Ficheiros
+                <input type="file" multiple onChange={uploadMany} className="hidden" />
+              </label>
+              <label className="btn-ghost cursor-pointer !px-2.5 !py-1 text-xs" title="Pasta inteira">
+                <i className="fa-solid fa-folder" /> Pasta
+                {/* @ts-expect-error webkitdirectory is non-standard */}
+                <input type="file" multiple webkitdirectory="" directory="" onChange={uploadMany} className="hidden" />
+              </label>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 text-sm">
+              {busy === 'upload' && <p className="px-2 py-3 text-xs text-teal">A carregar…</p>}
+              {files.length === 0 ? (
+                <p className="px-2 py-4 text-xs text-muted">Sem ficheiros. Carrega um ZIP, ficheiros ou uma pasta.</p>
+              ) : (
+                files.map((f) => {
+                  const depth = f.path.split('/').length - 1;
+                  const name = f.path.split('/').pop();
+                  return (
+                    <div key={f.path} className="group flex items-center gap-1 rounded px-1.5 py-1 hover:bg-hover" style={{ paddingLeft: 6 + depth * 12 }}>
+                      <i className={`fa-solid ${f.type === 'dir' ? 'fa-folder text-gold' : 'fa-file text-muted'} w-4 text-xs`} />
+                      {f.type === 'file' ? (
+                        <button onClick={() => openFile(f.path)} className="flex-1 truncate text-left text-xs text-ink hover:text-teal">{name}</button>
+                      ) : (
+                        <span className="flex-1 truncate text-xs text-muted">{name}</span>
+                      )}
+                      <button onClick={() => deleteFile(f.path)} className="text-xs text-muted opacity-0 transition hover:text-danger group-hover:opacity-100" title="Apagar"><i className="fa-solid fa-xmark" /></button>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
-          {/* Terminal console */}
-          <div className="card flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between border-b border-line px-4 py-3">
-              <h2 className="font-display text-sm font-semibold"><i className="fa-solid fa-terminal mr-2 text-teal" />Consola</h2>
-              <button onClick={loadLive} className="text-xs text-muted hover:text-ink"><i className="fa-solid fa-rotate mr-1" />atualizar</button>
+          {/* Terminal */}
+          <div className="card flex max-h-[600px] flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+              <span className="font-display text-sm font-semibold"><i className="fa-solid fa-terminal mr-2 text-teal" />Terminal</span>
+              <button onClick={() => setLogs([])} className="text-xs text-muted hover:text-ink">limpar</button>
             </div>
-            <div ref={logsRef} className="h-[420px] overflow-y-auto bg-black/50 p-4 font-mono text-xs leading-relaxed">
-              {live.logs.length === 0 ? (
-                <p className="text-muted2">Sem logs. Carrega um projeto e clica em Iniciar…</p>
+            <div ref={logsRef} className="flex-1 overflow-y-auto bg-[#0b0f14] p-4 font-mono text-[13px] leading-relaxed text-[#c9d1d9]">
+              {logs.length === 0 ? (
+                <p className="text-[#6e7681]">Sem output. Carrega um projeto e clica em Iniciar, ou escreve um comando abaixo…</p>
               ) : (
-                live.logs.map((l, i) => <div key={i} className="whitespace-pre-wrap text-muted">{l}</div>)
+                logs.map((l, i) => (
+                  <div key={i} className={`whitespace-pre-wrap ${l.startsWith('$ ') ? 'text-teal' : ''}`}>{l}</div>
+                ))
               )}
             </div>
-            <div className="flex items-center gap-2 border-t border-line bg-black/30 px-3 py-2">
+            <div className="flex items-center gap-2 border-t border-line bg-[#0b0f14] px-3 py-2">
               <span className="font-mono text-sm text-teal">$</span>
               <input
                 value={cmd}
                 onChange={(e) => setCmd(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendCommand()}
-                placeholder="comando (ex: ls, npm install, node setup.js)…"
+                placeholder="ex: pkg install ffmpeg -y   |   npm install   |   node index.js"
                 spellCheck={false}
-                className="flex-1 bg-transparent font-mono text-xs text-ink placeholder:text-muted2 focus:outline-none"
+                autoCapitalize="off"
+                autoCorrect="off"
+                className="flex-1 bg-transparent font-mono text-[13px] text-[#c9d1d9] placeholder:text-[#6e7681] focus:outline-none"
               />
-              <button onClick={sendCommand} className="btn-ghost !px-3 !py-1 text-xs">Enviar</button>
+              <button onClick={sendCommand} className="btn-primary !px-3 !py-1 text-xs">Enviar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* File editor */}
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setEditing(null)}>
+          <div className="card flex max-h-[85vh] w-full max-w-3xl flex-col p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="truncate font-mono text-sm font-semibold">{editing.path}</h2>
+              <button onClick={() => setEditing(null)} className="text-muted hover:text-ink"><i className="fa-solid fa-xmark" /></button>
+            </div>
+            <textarea
+              value={editing.content}
+              onChange={(e) => setEditing({ ...editing, content: e.target.value })}
+              spellCheck={false}
+              className="field mt-4 min-h-[50vh] flex-1 font-mono text-xs"
+            />
+            <div className="mt-4 flex justify-end gap-3">
+              <button onClick={() => setEditing(null)} className="btn-ghost">Fechar</button>
+              <button onClick={saveFile} disabled={savingFile} className="btn-primary">{savingFile ? 'A guardar…' : 'Guardar'}</button>
             </div>
           </div>
         </div>
