@@ -24,6 +24,16 @@ export interface AssistantConfig {
   enabled?: boolean;
 }
 
+export interface SmtpConfig {
+  enabled?: boolean;
+  host?: string;
+  port?: number;
+  secure?: boolean;
+  user?: string;
+  pass?: string;
+  from?: string;
+}
+
 // Shown in the admin UI instead of a real secret so credentials never leave the
 // server. Saving this value back keeps the stored secret unchanged.
 const MASK = '••••••';
@@ -40,6 +50,8 @@ const DEFAULT_ASSISTANT: AssistantConfig = {
   model: 'claude-haiku-4-5-20251001',
   enabled: true,
 };
+
+const DEFAULT_SMTP: SmtpConfig = { enabled: false, port: 587, secure: false };
 
 // Secret fields that are encrypted at rest and masked in the admin view.
 const GATEWAY_SECRETS: (keyof GatewayConfig)[] = ['secretKey', 'clientSecret'];
@@ -126,13 +138,33 @@ export class SettingsService {
     return { ...merged, apiKey: merged.apiKey ? MASK : '' };
   }
 
+  // ── SMTP (email) ──────────────────────────────────────────
+  async getSmtp(): Promise<SmtpConfig> {
+    const stored = await this.getRaw<SmtpConfig>('smtp', DEFAULT_SMTP);
+    if (stored.pass) stored.pass = decryptSecret(stored.pass);
+    return stored;
+  }
+
+  async saveSmtp(value: Partial<SmtpConfig>) {
+    const stored = await this.getRaw<SmtpConfig>('smtp', DEFAULT_SMTP);
+    const merged: SmtpConfig = { ...stored, ...value };
+    merged.pass = this.mergeSecret(value.pass, stored.pass);
+    await this.setRaw('smtp', merged);
+    return { ...merged, pass: merged.pass ? MASK : '' };
+  }
+
   // ── Views ─────────────────────────────────────────────────
   /** Config for the SUPER_ADMIN settings page — secrets masked, never leaked. */
   async adminView() {
-    const [gateways, assistant] = await Promise.all([this.getStoredGateways(), this.getRaw<AssistantConfig>('assistant', DEFAULT_ASSISTANT)]);
+    const [gateways, assistant, smtp] = await Promise.all([
+      this.getStoredGateways(),
+      this.getRaw<AssistantConfig>('assistant', DEFAULT_ASSISTANT),
+      this.getRaw<SmtpConfig>('smtp', DEFAULT_SMTP),
+    ]);
     return {
       gateways: this.maskedGateways(gateways),
       assistant: { ...assistant, apiKey: assistant.apiKey ? MASK : '' },
+      smtp: { ...smtp, pass: smtp.pass ? MASK : '' },
     };
   }
 

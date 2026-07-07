@@ -27,6 +27,15 @@ interface Assistant {
   model?: string;
   enabled?: boolean;
 }
+interface Smtp {
+  enabled?: boolean;
+  host?: string;
+  port?: number;
+  secure?: boolean;
+  user?: string;
+  pass?: string;
+  from?: string;
+}
 
 const EMPTY: Gateways = {
   visa: {},
@@ -39,6 +48,7 @@ export default function AdminSettingsPage() {
   const { user, loading } = useAuth('SUPER_ADMIN');
   const [gateways, setGateways] = useState<Gateways>(EMPTY);
   const [assistant, setAssistant] = useState<Assistant>({ provider: 'anthropic', enabled: true });
+  const [smtp, setSmtp] = useState<Smtp>({ port: 587 });
   const [savedMsg, setSavedMsg] = useState('');
   const [busy, setBusy] = useState('');
 
@@ -46,6 +56,7 @@ export default function AdminSettingsPage() {
     const res = await authApi.get('/admin/settings');
     setGateways({ ...EMPTY, ...res.data.gateways });
     setAssistant(res.data.assistant || {});
+    setSmtp(res.data.smtp || { port: 587 });
   }
   useEffect(() => {
     if (user) load();
@@ -74,6 +85,15 @@ export default function AdminSettingsPage() {
     try {
       await authApi.put('/admin/settings/assistant', assistant);
       flash('Assistente guardado.');
+    } finally {
+      setBusy('');
+    }
+  }
+  async function saveSmtp() {
+    setBusy('smtp');
+    try {
+      await authApi.put('/admin/settings/smtp', { ...smtp, port: Number(smtp.port) || 587 });
+      flash('Email (SMTP) guardado.');
     } finally {
       setBusy('');
     }
@@ -158,6 +178,36 @@ export default function AdminSettingsPage() {
           <Field label="API key" value={assistant.apiKey || ''} onChange={(v) => setAssistant({ ...assistant, apiKey: v })} placeholder="sk-..." secret />
           <div>
             <button onClick={saveAssistant} disabled={busy === 'ai'} className="btn-primary">{busy === 'ai' ? 'A guardar…' : 'Guardar assistente'}</button>
+          </div>
+        </div>
+      </section>
+
+      {/* Email / SMTP */}
+      <section className="mb-8">
+        <h2 className="mb-3 font-display text-lg font-bold">Email (notificações)</h2>
+        <div className="card grid max-w-2xl gap-3 p-5">
+          <p className="text-sm text-muted">
+            Configura um servidor SMTP para enviar emails (pagamento confirmado, pagamento a aguardar). Ex: Gmail, SendGrid, Mailgun.
+          </p>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input type="checkbox" checked={!!smtp.enabled} onChange={(e) => setSmtp({ ...smtp, enabled: e.target.checked })} />
+            Email ativo
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Servidor (host)" value={smtp.host || ''} onChange={(v) => setSmtp({ ...smtp, host: v })} placeholder="smtp.gmail.com" />
+            <Field label="Porta" value={String(smtp.port ?? '')} onChange={(v) => setSmtp({ ...smtp, port: Number(v) || undefined })} placeholder="587" />
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input type="checkbox" checked={!!smtp.secure} onChange={(e) => setSmtp({ ...smtp, secure: e.target.checked })} />
+            Ligação segura (SSL/TLS — normalmente porta 465)
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Utilizador" value={smtp.user || ''} onChange={(v) => setSmtp({ ...smtp, user: v })} placeholder="o-teu-email@gmail.com" />
+            <Field label="Palavra-passe" value={smtp.pass || ''} onChange={(v) => setSmtp({ ...smtp, pass: v })} placeholder="app password" secret />
+          </div>
+          <Field label="Remetente (from)" value={smtp.from || ''} onChange={(v) => setSmtp({ ...smtp, from: v })} placeholder="HostAgente <no-reply@hostagente.co.mz>" />
+          <div>
+            <button onClick={saveSmtp} disabled={busy === 'smtp'} className="btn-primary">{busy === 'smtp' ? 'A guardar…' : 'Guardar email'}</button>
           </div>
         </div>
       </section>

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { MailService } from '../mail/mail.service';
 
 type GatewayId = 'visa' | 'paypal' | 'mpesa' | 'emola';
 
@@ -16,6 +17,7 @@ export class CheckoutService {
   constructor(
     private prisma: PrismaService,
     private settings: SettingsService,
+    private mail: MailService,
   ) {}
 
   async options(_tenantId: string) {
@@ -105,6 +107,15 @@ export class CheckoutService {
     const invoice = await this.prisma.invoice.findFirst({ where: { id: invoiceId, tenantId } });
     if (!invoice) throw new NotFoundException('Fatura não encontrada');
     await this.prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'awaiting' } });
+
+    // Alert the super admin that a manual payment needs confirmation.
+    const to = await this.mail.superAdminEmail();
+    await this.mail.send(
+      to,
+      'Novo pagamento a aguardar confirmação',
+      `<p>Um revendedor submeteu um pagamento (${invoice.amount} MZN, ref. ${invoice.reference || '—'}, via ${invoice.gateway || '—'}).</p>
+       <p>Confirma ou rejeita na página <b>Pagamentos</b> do painel.</p>`,
+    );
     return { success: true, activated: false };
   }
 }

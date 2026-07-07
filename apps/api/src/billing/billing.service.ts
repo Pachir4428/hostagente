@@ -1,9 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class BillingService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private mail: MailService,
+  ) {}
 
   /** Invoices needing admin action (manual gateway payments), newest first. */
   async pending() {
@@ -57,6 +61,17 @@ export class BillingService {
         },
       }),
     ]);
+
+    // Notify the tenant that their plan is active.
+    const plan = await this.prisma.plan.findUnique({ where: { id: invoice.planId } });
+    const to = await this.mail.tenantAdminEmail(invoice.tenantId);
+    await this.mail.send(
+      to,
+      'Pagamento confirmado — plano ativado',
+      `<p>O teu pagamento de <b>${invoice.amount} MZN</b> foi confirmado.</p>
+       <p>O plano <b>${plan?.name || ''}</b> está agora ativo. Obrigado!</p>
+       <p>— HostAgente</p>`,
+    );
     return { success: true };
   }
 

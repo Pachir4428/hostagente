@@ -5,6 +5,7 @@ import { authApi } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
 import { AppShell } from '@/components/AppShell';
 import { TENANT_NAV } from '@/lib/nav';
+import { OnboardingChecklist } from '@/components/OnboardingChecklist';
 import { mzn, dateTime, TX_STATUS, OPERATOR_LABEL } from '@/lib/format';
 
 interface Summary {
@@ -59,6 +60,8 @@ export default function TenantDashboard() {
         </div>
       ) : (
         <div className="space-y-6">
+          <OnboardingChecklist />
+
           {/* MacroDroid status */}
           <div
             className={`card flex items-center gap-3 px-5 py-4 ${
