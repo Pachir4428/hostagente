@@ -125,11 +125,12 @@ export class BotsService {
   async live(tenantId: string, id: string) {
     await this.get(tenantId, id);
     try {
-      const [status, qr, pairing, logs] = await Promise.all([
+      const [status, qr, pairing, logs, statsRaw] = await Promise.all([
         this.redis.get(`bot:${id}:status`),
         this.redis.get(`bot:${id}:qr`),
         this.redis.get(`bot:${id}:pairing`),
         this.redis.lrange(`bot:${id}:logs`, -200, -1),
+        this.redis.get(`bot:${id}:stats`),
       ]);
       // Keep the DB status roughly in sync for the list view.
       if (status) {
@@ -137,9 +138,15 @@ export class BotsService {
           .update({ where: { id }, data: { status: status as any } })
           .catch(() => null);
       }
-      return { status: status || 'stopped', qr, pairing, logs: logs || [] };
+      let stats: any = null;
+      try {
+        stats = statsRaw ? JSON.parse(statsRaw) : null;
+      } catch {
+        stats = null;
+      }
+      return { status: status || 'stopped', qr, pairing, logs: logs || [], stats };
     } catch {
-      return { status: 'stopped', qr: null, pairing: null, logs: [], redisError: true };
+      return { status: 'stopped', qr: null, pairing: null, logs: [], stats: null, redisError: true };
     }
   }
 

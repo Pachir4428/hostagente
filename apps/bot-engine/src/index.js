@@ -33,10 +33,17 @@ const K = {
   cmd: `bot:${BOT_ID}:cmd`,
   stdin: `bot:${BOT_ID}:stdin`,
   config: `bot:${BOT_ID}:config`,
+  stats: `bot:${BOT_ID}:stats`,
 };
 
 let child = null; // the running project process
 let workdir = DIR; // resolved project root (may be a subfolder of DIR)
+let stopping = false; // true during graceful shutdown / operator stop
+let startedAt = null; // when the current child started (for uptime)
+let restarts = 0; // auto-restart counter since boot
+let lastActivity = Date.now(); // last log line time
+let currentStart = null; // resolved start command (for auto-restart)
+const MAX_RESTARTS = 5;
 
 // Strip ANSI escape codes so npm/Baileys output is readable in the web console.
 function clean(s) {
@@ -47,6 +54,7 @@ function clean(s) {
 function log(line) {
   const text = clean(line);
   if (text.trim() === '') return;
+  lastActivity = Date.now();
   process.stdout.write(text + '\n');
   redis.rpush(K.logs, text).catch(() => {});
   redis.ltrim(K.logs, -800, -1).catch(() => {});
@@ -55,6 +63,18 @@ function log(line) {
 
 function setStatus(s) {
   redis.set(K.status, s, 'EX', 60 * 60 * 24).catch(() => {});
+}
+
+// Publish live stats for the web console (uptime, restarts, activity).
+function publishStats() {
+  const stats = {
+    running: !!child,
+    startedAt,
+    uptimeMs: startedAt ? Date.now() - startedAt : 0,
+    restarts,
+    lastActivity,
+  };
+  redis.set(K.stats, JSON.stringify(stats), 'EX', 60 * 60 * 24).catch(() => {});
 }
 
 function streamLines(stream) {
@@ -181,15 +201,48 @@ async function startProject(explicitCmd) {
     setStatus('error');
     return;
   }
-  log(`▶️ A iniciar: ${startCmd}  (pasta: ${path.relative(DIR, workdir) || '.'})`);
+  currentStart = startCmd;
+  restarts = 0;
+  spawnChild();
+}
+
+function spawnChild() {
+  log(`▶️ A iniciar: ${currentStart}  (pasta: ${path.relative(DIR, workdir) || '.'})`);
   setStatus('connected'); // "a correr"
-  child = spawn('sh', ['-c', startCmd], { cwd: workdir, env: { ...process.env }, stdio: ['pipe', 'pipe', 'pipe'] });
+  startedAt = Date.now();
+  publishStats();
+  child = spawn('sh', ['-c', currentStart], { cwd: workdir, env: { ...process.env }, stdio: ['pipe', 'pipe', 'pipe'] });
   streamLines(child.stdout);
   streamLines(child.stderr);
   child.on('exit', (code) => {
-    log(`⏹️ Processo terminou (código ${code}).`);
-    setStatus(code === 0 ? 'stopped' : 'error');
     child = null;
+    startedAt = null;
+    if (stopping) {
+      setStatus('stopped');
+      publishStats();
+      return;
+    }
+    if (code === 0) {
+      log('⏹️ Processo terminou normalmente (código 0).');
+      setStatus('stopped');
+      publishStats();
+      return;
+    }
+    // Crashed — auto-restart with backoff, up to MAX_RESTARTS.
+    if (restarts < MAX_RESTARTS) {
+      restarts++;
+      const delay = Math.min(30000, 3000 * restarts);
+      log(`⚠️ O bot caiu (código ${code}). Reinício automático ${restarts}/${MAX_RESTARTS} em ${Math.round(delay / 1000)}s…`);
+      setStatus('starting');
+      publishStats();
+      setTimeout(() => {
+        if (!stopping) spawnChild();
+      }, delay);
+    } else {
+      log(`🛑 O bot caiu ${restarts} vezes seguidas. Parei os reinícios automáticos — verifica os logs e clica em Iniciar.`);
+      setStatus('error');
+      publishStats();
+    }
   });
 }
 
@@ -234,7 +287,11 @@ boot().catch((err) => {
   setStatus('error');
 });
 
+// Keep live stats fresh for the web console.
+setInterval(publishStats, 5000);
+
 function shutdown() {
+  stopping = true;
   log('🛑 A encerrar…');
   setStatus('stopped');
   if (child) {

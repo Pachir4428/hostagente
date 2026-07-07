@@ -30,6 +30,25 @@ const STATUS: Record<string, { label: string; chip: string; dot: string }> = {
 };
 const st = (s: string) => STATUS[s] || STATUS.stopped;
 
+function fmtUptime(ms: number): string {
+  if (!ms || ms < 0) return '—';
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+function fmtAgo(ts: number): string {
+  if (!ts) return '—';
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return `há ${s}s`;
+  if (s < 3600) return `há ${Math.floor(s / 60)}m`;
+  return `há ${Math.floor(s / 3600)}h`;
+}
+
 export default function BotConsolePage() {
   const { user, loading } = useAuth('TENANT');
   const params = useParams();
@@ -38,6 +57,7 @@ export default function BotConsolePage() {
 
   const [bot, setBot] = useState<Bot | null>(null);
   const [status, setStatus] = useState('stopped');
+  const [stats, setStats] = useState<{ uptimeMs: number; restarts: number; lastActivity: number; running: boolean } | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [busy, setBusy] = useState('');
   const [cmd, setCmd] = useState('');
@@ -75,6 +95,7 @@ export default function BotConsolePage() {
       const res = await authApi.get(`/bots/${id}/live`);
       setStatus(res.data.status);
       setLogs(res.data.logs || []);
+      setStats(res.data.stats || null);
     } catch {
       /* ignore */
     }
@@ -225,6 +246,15 @@ export default function BotConsolePage() {
         <div className="flex items-center gap-3">
           <span className={`chip ${s.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />{s.label}</span>
           <span className="text-sm text-muted">{bot.type === 'manual' ? 'Manual (projeto Node/Baileys)' : 'Automático (MacroDroid)'}</span>
+          {bot.type === 'manual' && stats && stats.running && (
+            <>
+              <span className="chip border border-line bg-hover text-muted" title="Tempo a correr"><i className="fa-regular fa-clock mr-1" />{fmtUptime(stats.uptimeMs)}</span>
+              {stats.restarts > 0 && (
+                <span className="chip border border-gold/25 bg-gold/10 text-gold" title="Reinícios automáticos"><i className="fa-solid fa-rotate mr-1" />{stats.restarts}</span>
+              )}
+              <span className="chip border border-line bg-hover text-muted" title="Última atividade"><i className="fa-solid fa-wave-square mr-1" />{fmtAgo(stats.lastActivity)}</span>
+            </>
+          )}
         </div>
         {bot.type === 'manual' && (
           <div className="flex flex-wrap gap-2">
