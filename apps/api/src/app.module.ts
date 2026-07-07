@@ -23,6 +23,7 @@ import { ReportsModule } from './reports/reports.module';
 import { SettingsModule } from './settings/settings.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { CheckoutModule } from './checkout/checkout.module';
+import { BillingModule } from './billing/billing.module';
 import { SeedModule } from './seed/seed.module';
 
 @Module({
@@ -56,6 +57,7 @@ import { SeedModule } from './seed/seed.module';
     // Cross-cutting: AI assistant (tenant + admin) and plan checkout
     AssistantModule,
     CheckoutModule,
+    BillingModule,
   ],
 })
 export class AppModule {}

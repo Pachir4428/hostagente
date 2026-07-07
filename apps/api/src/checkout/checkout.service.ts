@@ -65,9 +65,8 @@ export class CheckoutService {
   }
 
   /**
-   * Completes a checkout: marks the invoice paid and activates the plan.
-   * For M-Pesa/e-Mola this is the "Já paguei" confirmation (reconciled later);
-   * for card/PayPal it is called after the provider returns success.
+   * Card/PayPal success callback: activates the plan immediately.
+   * (Real provider capture is a later phase; this simulates a successful return.)
    */
   async confirm(tenantId: string, invoiceId: string) {
     const invoice = await this.prisma.invoice.findFirst({ where: { id: invoiceId, tenantId } });
@@ -94,6 +93,18 @@ export class CheckoutService {
       }),
     ]);
 
-    return { success: true };
+    return { success: true, activated: true };
+  }
+
+  /**
+   * M-Pesa/e-Mola "Já paguei": marks the invoice as awaiting admin review.
+   * The plan is only activated when the SUPER_ADMIN confirms the payment in
+   * the billing reconciliation page.
+   */
+  async submit(tenantId: string, invoiceId: string) {
+    const invoice = await this.prisma.invoice.findFirst({ where: { id: invoiceId, tenantId } });
+    if (!invoice) throw new NotFoundException('Fatura não encontrada');
+    await this.prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'awaiting' } });
+    return { success: true, activated: false };
   }
 }

@@ -137,11 +137,17 @@ export default function SubscriptionPage() {
     if (!order) return;
     setCheckoutBusy(true);
     try {
-      await authApi.post(`/checkout/${order.invoiceId}/confirm`);
+      // Manual gateways (M-Pesa/e-Mola) go to admin review; card/PayPal activate now.
+      const endpoint = order.requiresManual ? 'submit' : 'confirm';
+      await authApi.post(`/checkout/${order.invoiceId}/${endpoint}`);
       setCheckoutPlan(null);
       setOrder(null);
       await load();
-      alert('Pagamento registado e plano ativado!');
+      alert(
+        order.requiresManual
+          ? 'Pagamento registado! O administrador vai confirmar e o plano será ativado.'
+          : 'Pagamento concluído e plano ativado!',
+      );
     } catch (e: any) {
       alert(e.response?.data?.message || 'Não foi possível confirmar');
     } finally {

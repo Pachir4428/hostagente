@@ -60,6 +60,30 @@ docker build $NO_CACHE -t bot-engine:latest ./apps/bot-engine
 
 echo "Images built"
 
+# Align the Postgres password with .env BEFORE starting the app services.
+# The postgres data volume only reads POSTGRES_PASSWORD on first init, so a
+# later change to .env would otherwise cause "P1000 Authentication failed".
+# This makes every deploy self-healing for that class of error.
+echo "Aligning database password with .env..."
+docker compose -f docker-compose.prod.yml up -d postgres
+for i in $(seq 1 30); do
+    if docker compose -f docker-compose.prod.yml exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+# Strip optional surrounding quotes, then ALTER USER inside the container,
+# doubling single quotes so any special character in the password is safe.
+DB_PW="$POSTGRES_PASSWORD"
+case "$DB_PW" in
+  \"*\") DB_PW=$(printf '%s' "$DB_PW" | sed 's/^"//; s/"$//') ;;
+  \'*\') DB_PW=$(printf '%s' "$DB_PW" | sed "s/^'//; s/'$//") ;;
+esac
+docker compose -f docker-compose.prod.yml exec -T -e NEWPW="$DB_PW" postgres sh -c '
+  esc=$(printf "%s" "$NEWPW" | sed "s/'"'"'/'"'"''"'"'/g")
+  psql -U postgres -c "ALTER USER postgres PASSWORD '"'"'$esc'"'"';"
+' || echo "WARNING: could not align DB password (continuing)"
+
 # Deploy with docker compose
 echo "Starting services..."
 docker compose -f docker-compose.prod.yml up -d

@@ -28,4 +28,9 @@ export class CheckoutController {
   confirm(@CurrentUser() user: AuthUser, @Param('invoiceId') invoiceId: string) {
     return this.service.confirm(user.tenantId!, invoiceId);
   }
+
+  @Post(':invoiceId/submit')
+  submit(@CurrentUser() user: AuthUser, @Param('invoiceId') invoiceId: string) {
+    return this.service.submit(user.tenantId!, invoiceId);
+  }
 }

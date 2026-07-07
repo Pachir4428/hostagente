@@ -16,6 +16,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin', label: 'Plataforma', icon: 'fa-solid fa-gauge-high' },
   { href: '/admin/tenants', label: 'Tenants', icon: 'fa-solid fa-building' },
   { href: '/admin/plans', label: 'Planos & Cupões', icon: 'fa-solid fa-tags' },
+  { href: '/admin/billing', label: 'Pagamentos', icon: 'fa-solid fa-file-invoice-dollar' },
   { href: '/admin/reports', label: 'Relatórios', icon: 'fa-solid fa-chart-line' },
   { href: '/admin/settings', label: 'Definições & API', icon: 'fa-solid fa-sliders' },
   { href: '/admin/support', label: 'Suporte', icon: 'fa-solid fa-headset' },
