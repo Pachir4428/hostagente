@@ -1,0 +1,99 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
+
+type GatewayId = 'visa' | 'paypal' | 'mpesa' | 'emola';
+
+const LABELS: Record<GatewayId, string> = {
+  visa: 'Cartão (Visa/Mastercard)',
+  paypal: 'PayPal',
+  mpesa: 'M-Pesa',
+  emola: 'e-Mola',
+};
+
+@Injectable()
+export class CheckoutService {
+  constructor(
+    private prisma: PrismaService,
+    private settings: SettingsService,
+  ) {}
+
+  async options(_tenantId: string) {
+    const [plans, gateways] = await Promise.all([
+      this.prisma.plan.findMany({ where: { isActive: true }, orderBy: { priceMonthly: 'asc' } }),
+      this.settings.publicGateways(),
+    ]);
+    const enabled = (Object.keys(gateways) as GatewayId[])
+      .filter((k) => gateways[k]?.enabled)
+      .map((k) => ({ id: k, label: LABELS[k], number: gateways[k].number || null }));
+    return { plans, gateways: enabled };
+  }
+
+  async create(tenantId: string, planId: string, gateway: GatewayId) {
+    const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
+    if (!plan) throw new BadRequestException('Plano inválido');
+
+    const all = await this.settings.getGateways();
+    const cfg = all[gateway];
+    if (!cfg || !cfg.enabled) {
+      throw new BadRequestException('Método de pagamento indisponível.');
+    }
+
+    const reference = `HA-${Date.now().toString(36).toUpperCase()}`;
+    const invoice = await this.prisma.invoice.create({
+      data: { tenantId, amount: plan.priceMonthly, status: 'pending', gateway, reference, planId },
+    });
+
+    let instructions = '';
+    let requiresManual = false;
+    if (gateway === 'mpesa' || gateway === 'emola') {
+      requiresManual = true;
+      instructions = `Envia ${plan.priceMonthly} MZN para o número ${cfg.number || '(não configurado)'} via ${LABELS[gateway]}, usando a referência ${reference}. Depois clica em "Já paguei" para ativarmos o plano.`;
+    } else {
+      instructions = `Serás encaminhado para ${LABELS[gateway]} (${cfg.mode || 'sandbox'}) para concluir o pagamento de ${plan.priceMonthly} MZN.`;
+    }
+
+    return {
+      invoiceId: invoice.id,
+      reference,
+      amount: plan.priceMonthly,
+      gateway,
+      label: LABELS[gateway],
+      requiresManual,
+      instructions,
+    };
+  }
+
+  /**
+   * Completes a checkout: marks the invoice paid and activates the plan.
+   * For M-Pesa/e-Mola this is the "Já paguei" confirmation (reconciled later);
+   * for card/PayPal it is called after the provider returns success.
+   */
+  async confirm(tenantId: string, invoiceId: string) {
+    const invoice = await this.prisma.invoice.findFirst({ where: { id: invoiceId, tenantId } });
+    if (!invoice) throw new NotFoundException('Fatura não encontrada');
+    if (!invoice.planId) throw new BadRequestException('Fatura sem plano associado');
+
+    const nextPeriod = new Date();
+    nextPeriod.setMonth(nextPeriod.getMonth() + 1);
+
+    await this.prisma.$transaction([
+      this.prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'paid' } }),
+      this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: {
+          planId: invoice.planId,
+          status: 'active',
+          subscription: {
+            upsert: {
+              create: { planId: invoice.planId, status: 'active', currentPeriodEnd: nextPeriod },
+              update: { planId: invoice.planId, status: 'active', currentPeriodEnd: nextPeriod },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return { success: true };
+  }
+}

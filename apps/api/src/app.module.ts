@@ -20,6 +20,9 @@ import { TenantsModule } from './tenants/tenants.module';
 import { PlatformModule } from './platform/platform.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { ReportsModule } from './reports/reports.module';
+import { SettingsModule } from './settings/settings.module';
+import { AssistantModule } from './assistant/assistant.module';
+import { CheckoutModule } from './checkout/checkout.module';
 import { SeedModule } from './seed/seed.module';
 
 @Module({
@@ -49,6 +52,10 @@ import { SeedModule } from './seed/seed.module';
     PlatformModule,
     CatalogModule,
     ReportsModule,
+    SettingsModule,
+    // Cross-cutting: AI assistant (tenant + admin) and plan checkout
+    AssistantModule,
+    CheckoutModule,
   ],
 })
 export class AppModule {}

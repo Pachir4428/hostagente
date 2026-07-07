@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { clearToken } from '@/lib/auth';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
+import { AssistantWidget } from './AssistantWidget';
 
 export interface NavItem {
   href: string;
@@ -113,6 +114,7 @@ export function AppShell({
         </header>
         <main className="min-w-0 flex-1 p-5 sm:p-8">{children}</main>
       </div>
+      <AssistantWidget />
     </div>
   );
 }

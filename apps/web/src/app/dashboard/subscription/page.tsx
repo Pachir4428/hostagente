@@ -30,6 +30,27 @@ interface Invoice {
   createdAt: string;
 }
 
+interface Gateway {
+  id: 'visa' | 'paypal' | 'mpesa' | 'emola';
+  label: string;
+  number: string | null;
+}
+interface Order {
+  invoiceId: string;
+  reference: string;
+  amount: number;
+  label: string;
+  requiresManual: boolean;
+  instructions: string;
+}
+
+const GATEWAY_ICON: Record<string, string> = {
+  visa: 'fa-brands fa-cc-visa',
+  paypal: 'fa-brands fa-paypal',
+  mpesa: 'fa-solid fa-mobile-screen',
+  emola: 'fa-solid fa-mobile-screen-button',
+};
+
 const STATUS_CHIP: Record<string, string> = {
   active: 'bg-teal/10 text-teal border border-teal/25',
   trial: 'bg-gold/10 text-gold border border-gold/25',
@@ -47,6 +68,12 @@ export default function SubscriptionPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [busy, setBusy] = useState('');
 
+  // Checkout state
+  const [checkoutPlan, setCheckoutPlan] = useState<Plan | null>(null);
+  const [gateways, setGateways] = useState<Gateway[]>([]);
+  const [order, setOrder] = useState<Order | null>(null);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+
   async function load() {
     const [c, p, i] = await Promise.all([
       authApi.get('/subscription'),
@@ -63,16 +90,69 @@ export default function SubscriptionPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  async function changePlan(planId: string) {
+  async function openCheckout(plan: Plan) {
+    setCheckoutPlan(plan);
+    setOrder(null);
+    setGateways([]);
+    // Free plans activate immediately, no gateway needed.
+    if (plan.priceMonthly <= 0) {
+      await activateFree(plan.id);
+      return;
+    }
+    try {
+      const res = await authApi.get('/checkout/options');
+      setGateways(res.data.gateways || []);
+    } catch {
+      setGateways([]);
+    }
+  }
+
+  async function activateFree(planId: string) {
     setBusy(planId);
     try {
       await authApi.post('/subscription/change', { planId });
+      setCheckoutPlan(null);
       await load();
     } catch (e: any) {
       alert(e.response?.data?.message || 'Não foi possível mudar de plano');
     } finally {
       setBusy('');
     }
+  }
+
+  async function startPayment(gateway: Gateway['id']) {
+    if (!checkoutPlan) return;
+    setCheckoutBusy(true);
+    try {
+      const res = await authApi.post('/checkout', { planId: checkoutPlan.id, gateway });
+      setOrder(res.data);
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Não foi possível iniciar o pagamento');
+    } finally {
+      setCheckoutBusy(false);
+    }
+  }
+
+  async function confirmPayment() {
+    if (!order) return;
+    setCheckoutBusy(true);
+    try {
+      await authApi.post(`/checkout/${order.invoiceId}/confirm`);
+      setCheckoutPlan(null);
+      setOrder(null);
+      await load();
+      alert('Pagamento registado e plano ativado!');
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Não foi possível confirmar');
+    } finally {
+      setCheckoutBusy(false);
+    }
+  }
+
+  function closeCheckout() {
+    setCheckoutPlan(null);
+    setOrder(null);
+    setGateways([]);
   }
 
   const usagePct =
@@ -144,10 +224,10 @@ export default function SubscriptionPage() {
                     </ul>
                     <button
                       disabled={isCurrent || busy === p.id}
-                      onClick={() => changePlan(p.id)}
+                      onClick={() => openCheckout(p)}
                       className={`mt-6 w-full ${isCurrent ? 'btn-ghost' : 'btn-primary'}`}
                     >
-                      {isCurrent ? 'Plano atual' : busy === p.id ? 'A mudar…' : 'Escolher'}
+                      {isCurrent ? 'Plano atual' : busy === p.id ? 'A ativar…' : p.priceMonthly > 0 ? 'Assinar' : 'Escolher'}
                     </button>
                   </div>
                 );
@@ -184,6 +264,59 @@ export default function SubscriptionPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Checkout modal */}
+      {checkoutPlan && checkoutPlan.priceMonthly > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={closeCheckout}>
+          <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-lg font-bold">Checkout — {checkoutPlan.name}</h2>
+              <button onClick={closeCheckout} className="text-muted hover:text-ink"><i className="fa-solid fa-xmark" /></button>
+            </div>
+            <p className="mt-1 text-sm text-muted">{mzn(checkoutPlan.priceMonthly)} / mês</p>
+
+            {!order ? (
+              <div className="mt-5">
+                <p className="mb-3 text-sm text-muted">Escolhe o método de pagamento:</p>
+                {gateways.length === 0 ? (
+                  <p className="rounded-xl border border-line bg-hover px-4 py-3 text-sm text-muted">
+                    Nenhum método de pagamento está ativo. Pede ao administrador para configurar em Definições & API.
+                  </p>
+                ) : (
+                  <div className="grid gap-2">
+                    {gateways.map((g) => (
+                      <button
+                        key={g.id}
+                        disabled={checkoutBusy}
+                        onClick={() => startPayment(g.id)}
+                        className="flex items-center gap-3 rounded-xl border border-line px-4 py-3 text-left transition hover:border-teal/40 hover:bg-hover"
+                      >
+                        <i className={`${GATEWAY_ICON[g.id]} text-xl text-teal`} />
+                        <span className="flex-1 text-sm font-medium">{g.label}</span>
+                        <i className="fa-solid fa-chevron-right text-xs text-muted" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-5 space-y-4">
+                <div className="rounded-xl border border-teal/25 bg-teal/5 p-4 text-sm">
+                  <p className="mb-2 flex items-center gap-2 font-semibold text-teal">
+                    <i className={GATEWAY_ICON[order.label.toLowerCase().includes('pesa') ? 'mpesa' : order.label.toLowerCase().includes('mola') ? 'emola' : order.label.toLowerCase().includes('paypal') ? 'paypal' : 'visa']} /> {order.label}
+                  </p>
+                  <p className="text-ink">{order.instructions}</p>
+                  <p className="mt-2 text-muted">Referência: <span className="font-mono text-ink">{order.reference}</span></p>
+                </div>
+                <button onClick={confirmPayment} disabled={checkoutBusy} className="btn-primary w-full">
+                  {checkoutBusy ? 'A confirmar…' : order.requiresManual ? 'Já paguei' : 'Concluir pagamento'}
+                </button>
+                <button onClick={closeCheckout} className="btn-ghost w-full">Cancelar</button>
+              </div>
+            )}
           </div>
         </div>
       )}

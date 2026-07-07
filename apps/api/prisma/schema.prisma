@@ -172,9 +172,21 @@ model Invoice {
   tenantId  String
   amount    Float
   status    String   @default("pending") // paid | failed | pending
+  gateway   String? // visa | paypal | mpesa | emola
+  reference String? // gateway/payment reference
+  planId    String? // plan being purchased (checkout)
   createdAt DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+// Key/value store for platform-wide configuration managed by the SUPER_ADMIN:
+// payment-gateway credentials (Visa/Stripe, PayPal, M-Pesa, e-Mola) and the AI
+// assistant provider/key. Value is JSON so each key can hold a small object.
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
 }
 
 enum TicketStatus {
