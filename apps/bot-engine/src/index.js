@@ -32,9 +32,11 @@ const K = {
   logs: `bot:${BOT_ID}:logs`,
   cmd: `bot:${BOT_ID}:cmd`,
   stdin: `bot:${BOT_ID}:stdin`,
+  config: `bot:${BOT_ID}:config`,
 };
 
 let child = null; // the running project process
+let workdir = DIR; // resolved project root (may be a subfolder of DIR)
 
 // Strip ANSI escape codes so npm/Baileys output is readable in the web console.
 function clean(s) {
@@ -70,29 +72,82 @@ function streamLines(stream) {
 
 // Run a shell command inside the project dir, streaming output. Returns the
 // child so callers can await exit.
-function run(cmd, { label } = {}) {
+function run(cmd, { label, cwd } = {}) {
   if (label) log(`$ ${label}`);
-  const c = spawn('sh', ['-c', cmd], { cwd: DIR, env: { ...process.env } });
+  const c = spawn('sh', ['-c', cmd], { cwd: cwd || workdir, env: { ...process.env } });
   streamLines(c.stdout);
   streamLines(c.stderr);
   return c;
 }
 
-function detectStart() {
-  const pkgPath = path.join(DIR, 'package.json');
+// Read the operator's saved bot config (start command / subfolder) from Redis.
+async function readConfig() {
+  try {
+    const raw = await redis.get(K.config);
+    if (!raw) return {};
+    const cfg = JSON.parse(raw);
+    return cfg && typeof cfg === 'object' ? cfg : {};
+  } catch {
+    return {};
+  }
+}
+
+// Find the real project root: the folder that actually contains package.json /
+// index.js / bot.js. Handles ZIPs that wrap everything in a subfolder (e.g.
+// "base-bot/"). Searches the base and up to 2 levels of subfolders.
+function findProjectRoot(base) {
+  const isRoot = (d) =>
+    fs.existsSync(path.join(d, 'package.json')) ||
+    fs.existsSync(path.join(d, 'index.js')) ||
+    fs.existsSync(path.join(d, 'bot.js'));
+  if (isRoot(base)) return base;
+  const skip = new Set(['node_modules', '.git', 'auth', 'assets', 'storage']);
+  let dirs = [base];
+  for (let depth = 0; depth < 2; depth++) {
+    const next = [];
+    for (const d of dirs) {
+      let entries = [];
+      try {
+        entries = fs.readdirSync(d, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const e of entries) {
+        if (!e.isDirectory() || skip.has(e.name)) continue;
+        const sub = path.join(d, e.name);
+        if (isRoot(sub)) return sub;
+        next.push(sub);
+      }
+    }
+    dirs = next;
+  }
+  return base;
+}
+
+// Decide the start command for a given project root. Honors an explicit
+// operator-provided command first (they may have renamed the entry file).
+function detectStart(dir, explicit) {
+  if (explicit && explicit.trim()) {
+    const cmd = explicit.trim();
+    // Accept either a bare filename (index.js) or a full command (npm start).
+    if (/^[\w./-]+\.(js|mjs|cjs|ts)$/.test(cmd)) return `node ${cmd}`;
+    return cmd;
+  }
+  const pkgPath = path.join(dir, 'package.json');
   if (fs.existsSync(pkgPath)) {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
       if (pkg.scripts && pkg.scripts.start) return 'npm start';
-      if (pkg.main) return `node ${pkg.main}`;
+      if (pkg.main && fs.existsSync(path.join(dir, pkg.main))) return `node ${pkg.main}`;
     } catch {
       /* fall through */
     }
-    if (fs.existsSync(path.join(DIR, 'index.js'))) return 'node index.js';
+    if (fs.existsSync(path.join(dir, 'index.js'))) return 'node index.js';
+    if (fs.existsSync(path.join(dir, 'bot.js'))) return 'node bot.js';
     return 'npm start';
   }
-  if (fs.existsSync(path.join(DIR, 'index.js'))) return 'node index.js';
-  if (fs.existsSync(path.join(DIR, 'bot.js'))) return 'node bot.js';
+  if (fs.existsSync(path.join(dir, 'index.js'))) return 'node index.js';
+  if (fs.existsSync(path.join(dir, 'bot.js'))) return 'node bot.js';
   return null;
 }
 
@@ -109,7 +164,7 @@ async function extractIfNeeded() {
 
 function installDeps() {
   return new Promise((resolve) => {
-    if (!fs.existsSync(path.join(DIR, 'package.json'))) return resolve();
+    if (!fs.existsSync(path.join(workdir, 'package.json'))) return resolve();
     log('📥 npm install… (pode demorar)');
     const c = run('npm install --no-audit --no-fund', {});
     c.on('exit', (code) => {
@@ -119,16 +174,16 @@ function installDeps() {
   });
 }
 
-async function startProject() {
-  const startCmd = detectStart();
+async function startProject(explicitCmd) {
+  const startCmd = detectStart(workdir, explicitCmd);
   if (!startCmd) {
-    log('⚠️ Nenhum projeto encontrado (falta package.json / index.js). Carrega um ZIP.');
+    log('⚠️ Não encontrei o ficheiro de arranque. Indica-o em "Arranque" (ex: index.js ou npm start) ou carrega um ZIP com package.json.');
     setStatus('error');
     return;
   }
-  log(`▶️ A iniciar: ${startCmd}`);
+  log(`▶️ A iniciar: ${startCmd}  (pasta: ${path.relative(DIR, workdir) || '.'})`);
   setStatus('connected'); // "a correr"
-  child = spawn('sh', ['-c', startCmd], { cwd: DIR, env: { ...process.env }, stdio: ['pipe', 'pipe', 'pipe'] });
+  child = spawn('sh', ['-c', startCmd], { cwd: workdir, env: { ...process.env }, stdio: ['pipe', 'pipe', 'pipe'] });
   streamLines(child.stdout);
   streamLines(child.stderr);
   child.on('exit', (code) => {
@@ -143,8 +198,19 @@ async function boot() {
   setStatus('starting');
   log('🔧 Bot engine a iniciar…');
   await extractIfNeeded();
+
+  const cfg = await readConfig();
+  // Resolve the project root: explicit subfolder from config, else auto-detect.
+  if (cfg.workdir && cfg.workdir.trim()) {
+    workdir = path.resolve(DIR, cfg.workdir.trim());
+    if (!workdir.startsWith(DIR)) workdir = DIR; // guard against traversal
+  } else {
+    workdir = findProjectRoot(DIR);
+  }
+  if (workdir !== DIR) log(`📁 Projeto encontrado em: ${path.relative(DIR, workdir)}`);
+
   await installDeps();
-  await startProject();
+  await startProject(cfg.startCommand);
 }
 
 // Operator commands + stdin, via Redis pub/sub.

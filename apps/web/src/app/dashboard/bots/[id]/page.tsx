@@ -14,6 +14,7 @@ interface Bot {
   type: 'auto' | 'manual';
   status: string;
   hasScript: boolean;
+  config?: { startCommand?: string; workdir?: string } | null;
 }
 interface FileNode {
   path: string;
@@ -43,12 +44,31 @@ export default function BotConsolePage() {
   const [files, setFiles] = useState<FileNode[]>([]);
   const [editing, setEditing] = useState<{ path: string; content: string } | null>(null);
   const [savingFile, setSavingFile] = useState(false);
+  const [startCmd, setStartCmd] = useState('');
+  const [workdir, setWorkdir] = useState('');
+  const [savingCfg, setSavingCfg] = useState(false);
   const logsRef = useRef<HTMLDivElement>(null);
   const cmdHistory = useRef<string[]>([]);
 
   async function loadBot() {
     const res = await authApi.get(`/bots/${id}`);
     setBot(res.data);
+    setStartCmd(res.data?.config?.startCommand || '');
+    setWorkdir(res.data?.config?.workdir || '');
+  }
+
+  async function saveStartConfig() {
+    setSavingCfg(true);
+    try {
+      const config = { ...(bot?.config || {}), startCommand: startCmd.trim(), workdir: workdir.trim() };
+      await authApi.patch(`/bots/${id}`, { config });
+      await loadBot();
+      alert('Arranque guardado. Reinicia o bot para aplicar.');
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Não foi possível guardar');
+    } finally {
+      setSavingCfg(false);
+    }
   }
   async function loadLive() {
     try {
@@ -228,6 +248,44 @@ export default function BotConsolePage() {
           </p>
         </div>
       ) : (
+        <>
+        {/* Start configuration */}
+        <div className="card mb-5 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <i className="fa-solid fa-play text-teal" />
+            <span className="font-display text-sm font-semibold">Arranque</span>
+            <span className="text-xs text-muted">— indica o ficheiro que põe o bot a rodar (ele não adivinha)</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+            <label className="text-sm">
+              <span className="mb-1 block text-muted">Ficheiro / comando de arranque</span>
+              <input
+                value={startCmd}
+                onChange={(e) => setStartCmd(e.target.value)}
+                placeholder="ex: index.js   ou   npm start   ou   node meu-bot.js"
+                spellCheck={false}
+                className="field font-mono text-xs"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block text-muted">Subpasta do projeto (opcional)</span>
+              <input
+                value={workdir}
+                onChange={(e) => setWorkdir(e.target.value)}
+                placeholder="ex: base-bot   (deixa vazio p/ deteção automática)"
+                spellCheck={false}
+                className="field font-mono text-xs"
+              />
+            </label>
+            <button onClick={saveStartConfig} disabled={savingCfg} className="btn-primary whitespace-nowrap">
+              {savingCfg ? 'A guardar…' : 'Guardar arranque'}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            Se deixares vazio, o sistema tenta encontrar o package.json / index.js sozinho (mesmo dentro de uma subpasta). Se renomeaste o ficheiro, escreve aqui o nome. Reinicia o bot depois de guardar.
+          </p>
+        </div>
+
         <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
           {/* File manager */}
           <div className="card flex max-h-[600px] flex-col overflow-hidden">
@@ -305,6 +363,7 @@ export default function BotConsolePage() {
             </div>
           </div>
         </div>
+        </>
       )}
 
       {/* File editor */}
