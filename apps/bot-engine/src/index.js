@@ -217,8 +217,12 @@ async function boot() {
 redisSub.subscribe(K.cmd, K.stdin).catch(() => {});
 redisSub.on('message', (channel, message) => {
   if (channel === K.cmd) {
-    log(`\n$ ${message}`);
-    const c = run(message, {});
+    // Forgiving: a bare script path (index.js, base-bot/bot.js) is run with node
+    // so the operator doesn't hit "Permission denied" (exit 126).
+    let cmd = String(message).trim();
+    if (/^[\w./-]+\.(js|mjs|cjs)$/.test(cmd)) cmd = `node ${cmd}`;
+    log(`\n$ ${cmd}`);
+    const c = run(cmd, {});
     c.on('exit', (code) => log(`(exit ${code})`));
   } else if (channel === K.stdin && child && child.stdin.writable) {
     child.stdin.write(message + '\n');
