@@ -37,9 +37,20 @@ for i in $(seq 1 30); do
 done
 
 echo "Resetting the postgres user password to match .env..."
-# psql :'pw' quoting safely handles any special characters in the password.
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U postgres -v pw="$PW" -c "ALTER USER postgres PASSWORD :'pw';"
+# Strip optional surrounding quotes from the .env value.
+case "$PW" in
+  \"*\") PW=$(printf '%s' "$PW" | sed 's/^"//; s/"$//') ;;
+  \'*\') PW=$(printf '%s' "$PW" | sed "s/^'//; s/'$//") ;;
+esac
+# Pass the password to the container as an env var and build the ALTER inside
+# the container's shell, doubling any single quotes so the SQL literal is safe.
+# This avoids psql -v interpolation, which failed on some setups
+# ("syntax error at or near :"), and avoids the host shell expanding a '$' in
+# the password.
+docker compose -f docker-compose.prod.yml exec -T -e NEWPW="$PW" postgres sh -c '
+  esc=$(printf "%s" "$NEWPW" | sed "s/'"'"'/'"'"''"'"'/g")
+  psql -U postgres -c "ALTER USER postgres PASSWORD '"'"'$esc'"'"';"
+'
 
 echo "Restarting the stack..."
 docker compose -f docker-compose.prod.yml up -d
