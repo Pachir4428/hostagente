@@ -10,11 +10,16 @@ import { mzn, dateTime } from '@/lib/format';
 interface Plan {
   id: string;
   name: string;
+  description?: string | null;
   priceMonthly: number;
   maxTransactions: number;
   maxUsers: number;
+  maxBots?: number;
+  features?: string[];
   isActive: boolean;
 }
+
+const EMPTY_PLAN = { name: '', description: '', priceMonthly: '', maxTransactions: '', maxUsers: '', maxBots: '', features: '' };
 interface Coupon {
   id: string;
   code: string;
@@ -29,8 +34,9 @@ export default function AdminPlansPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [planModal, setPlanModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<string | null>(null);
   const [couponModal, setCouponModal] = useState(false);
-  const [planForm, setPlanForm] = useState({ name: '', priceMonthly: '', maxTransactions: '', maxUsers: '' });
+  const [planForm, setPlanForm] = useState({ ...EMPTY_PLAN });
   const [couponForm, setCouponForm] = useState({ code: '', discountPct: '', expiresAt: '' });
 
   async function load() {
@@ -43,15 +49,43 @@ export default function AdminPlansPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  async function savePlan() {
-    await authApi.post('/admin/plans', {
-      name: planForm.name,
-      priceMonthly: Number(planForm.priceMonthly),
-      maxTransactions: Number(planForm.maxTransactions),
-      maxUsers: Number(planForm.maxUsers),
+  function openNewPlan() {
+    setEditingPlan(null);
+    setPlanForm({ ...EMPTY_PLAN });
+    setPlanModal(true);
+  }
+  function openEditPlan(p: Plan) {
+    setEditingPlan(p.id);
+    setPlanForm({
+      name: p.name,
+      description: p.description || '',
+      priceMonthly: String(p.priceMonthly),
+      maxTransactions: String(p.maxTransactions),
+      maxUsers: String(p.maxUsers),
+      maxBots: String(p.maxBots ?? 1),
+      features: (p.features || []).join('\n'),
     });
+    setPlanModal(true);
+  }
+
+  async function savePlan() {
+    const payload = {
+      name: planForm.name,
+      description: planForm.description || null,
+      priceMonthly: Number(planForm.priceMonthly),
+      maxTransactions: Number(planForm.maxTransactions) || 0,
+      maxUsers: Number(planForm.maxUsers) || 1,
+      maxBots: Number(planForm.maxBots) || 1,
+      features: planForm.features.split('\n').map((f) => f.trim()).filter(Boolean),
+    };
+    if (editingPlan) {
+      await authApi.patch(`/admin/plans/${editingPlan}`, payload);
+    } else {
+      await authApi.post('/admin/plans', payload);
+    }
     setPlanModal(false);
-    setPlanForm({ name: '', priceMonthly: '', maxTransactions: '', maxUsers: '' });
+    setEditingPlan(null);
+    setPlanForm({ ...EMPTY_PLAN });
     load();
   }
   async function togglePlan(p: Plan) {
@@ -82,19 +116,30 @@ export default function AdminPlansPage() {
           <section>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-display text-lg font-semibold">Planos</h2>
-              <button onClick={() => setPlanModal(true)} className="btn-primary">+ Novo plano</button>
+              <button onClick={openNewPlan} className="btn-primary"><i className="fa-solid fa-plus" /> Novo plano</button>
             </div>
             <div className="grid gap-4 md:grid-cols-3">
               {plans.map((p) => (
                 <div key={p.id} className={`card p-5 ${!p.isActive ? 'opacity-60' : ''}`}>
                   <div className="flex items-center justify-between">
                     <h3 className="font-display font-semibold">{p.name}</h3>
-                    <button onClick={() => togglePlan(p)} className="text-xs text-teal hover:underline">
-                      {p.isActive ? 'Desativar' : 'Ativar'}
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => openEditPlan(p)} className="text-xs text-muted hover:text-teal" title="Editar"><i className="fa-solid fa-pen" /></button>
+                      <button onClick={() => togglePlan(p)} className="text-xs text-teal hover:underline">
+                        {p.isActive ? 'Desativar' : 'Ativar'}
+                      </button>
+                    </div>
                   </div>
-                  <p className="mt-2 font-display text-2xl font-bold">{mzn(p.priceMonthly)}</p>
-                  <p className="mt-1 text-sm text-muted">{p.maxTransactions} transações · {p.maxUsers} utilizador(es)</p>
+                  {p.description && <p className="mt-1 text-xs text-muted">{p.description}</p>}
+                  <p className="mt-2 font-display text-2xl font-bold">{mzn(p.priceMonthly)}<span className="text-sm font-normal text-muted">/mês</span></p>
+                  <ul className="mt-3 space-y-1 text-sm text-muted">
+                    <li><i className="fa-solid fa-check mr-2 text-teal" />{p.maxTransactions} transações/mês</li>
+                    <li><i className="fa-solid fa-check mr-2 text-teal" />{p.maxUsers} utilizador(es)</li>
+                    <li><i className="fa-solid fa-check mr-2 text-teal" />{p.maxBots ?? 1} bot(s)</li>
+                    {(p.features || []).map((f) => (
+                      <li key={f}><i className="fa-solid fa-check mr-2 text-teal" />{f}</li>
+                    ))}
+                  </ul>
                 </div>
               ))}
             </div>
@@ -144,12 +189,20 @@ export default function AdminPlansPage() {
       )}
 
       {planModal && (
-        <Modal title="Novo plano" onClose={() => setPlanModal(false)} onSave={savePlan}
-          disabled={!planForm.name || !planForm.priceMonthly}>
+        <Modal title={editingPlan ? 'Editar plano' : 'Novo plano'} onClose={() => setPlanModal(false)} onSave={savePlan}
+          disabled={!planForm.name || planForm.priceMonthly === ''}>
           <Field label="Nome" value={planForm.name} onChange={(v) => setPlanForm({ ...planForm, name: v })} />
-          <Field label="Preço mensal (MZN)" type="number" value={planForm.priceMonthly} onChange={(v) => setPlanForm({ ...planForm, priceMonthly: v })} />
-          <Field label="Máx. transações/mês" type="number" value={planForm.maxTransactions} onChange={(v) => setPlanForm({ ...planForm, maxTransactions: v })} />
-          <Field label="Máx. utilizadores" type="number" value={planForm.maxUsers} onChange={(v) => setPlanForm({ ...planForm, maxUsers: v })} />
+          <Field label="Descrição (opcional)" value={planForm.description} onChange={(v) => setPlanForm({ ...planForm, description: v })} />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Preço mensal (MZN)" type="number" value={planForm.priceMonthly} onChange={(v) => setPlanForm({ ...planForm, priceMonthly: v })} />
+            <Field label="Máx. transações/mês" type="number" value={planForm.maxTransactions} onChange={(v) => setPlanForm({ ...planForm, maxTransactions: v })} />
+            <Field label="Máx. utilizadores" type="number" value={planForm.maxUsers} onChange={(v) => setPlanForm({ ...planForm, maxUsers: v })} />
+            <Field label="Máx. bots" type="number" value={planForm.maxBots} onChange={(v) => setPlanForm({ ...planForm, maxBots: v })} />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm text-muted">Funcionalidades (uma por linha)</label>
+            <textarea value={planForm.features} onChange={(e) => setPlanForm({ ...planForm, features: e.target.value })} className="field min-h-[90px]" placeholder={'Suporte prioritário\nAPI dedicada\nIA avançada'} />
+          </div>
         </Modal>
       )}
       {couponModal && (

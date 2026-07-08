@@ -6,14 +6,15 @@ import { getToken } from '@/lib/auth';
 import { Logo } from '@/components/Logo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useBranding } from '@/lib/branding';
+import { renderIcon } from '@/components/IconPicker';
 
 const features = [
-  { icon: '⚡', title: 'Deteção automática', desc: 'O MacroDroid lê o SMS de M-Pesa/e-Mola e a venda é registada em segundos, sem toques.' },
-  { icon: '📦', title: 'Catálogo de pacotes', desc: 'Define valor → pacote de dados. Cada pagamento reconhecido entrega o pacote certo.' },
-  { icon: '🇲🇿', title: 'Feito para Moçambique', desc: 'M-Pesa, e-Mola e mKesh. Recebe e concilia tudo em meticais.' },
-  { icon: '📊', title: 'Painel em tempo real', desc: 'Vendas de hoje, receita, histórico completo e estado do MacroDroid ao vivo.' },
-  { icon: '🔔', title: 'Alertas inteligentes', desc: 'Avisos de falhas de rede, pagamentos não reconhecidos e subscrição a expirar.' },
-  { icon: '🔒', title: 'Multi-tenant seguro', desc: 'Cada revendedor tem os seus dados isolados e a sua chave de API própria.' },
+  { icon: 'fa-solid fa-bolt', title: 'Deteção automática', desc: 'O MacroDroid lê o SMS de M-Pesa/e-Mola e a venda é registada em segundos, sem toques.' },
+  { icon: 'fa-solid fa-box', title: 'Catálogo de pacotes', desc: 'Define valor → pacote de dados. Cada pagamento reconhecido entrega o pacote certo.' },
+  { icon: 'fa-solid fa-mobile-screen', title: 'Feito para Moçambique', desc: 'M-Pesa, e-Mola e mKesh. Recebe e concilia tudo em meticais.' },
+  { icon: 'fa-solid fa-chart-line', title: 'Painel em tempo real', desc: 'Vendas de hoje, receita, histórico completo e estado do MacroDroid ao vivo.' },
+  { icon: 'fa-solid fa-bell', title: 'Alertas inteligentes', desc: 'Avisos de falhas de rede, pagamentos não reconhecidos e subscrição a expirar.' },
+  { icon: 'fa-solid fa-lock', title: 'Multi-tenant seguro', desc: 'Cada revendedor tem os seus dados isolados e a sua chave de API própria.' },
 ];
 
 const steps = [
@@ -121,7 +122,7 @@ export default function Home() {
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {feats.map((f, i) => (
             <div key={f.title || i} className="card p-6 transition hover:border-teal/30">
-              <div className="grid h-11 w-11 place-items-center rounded-xl bg-teal/10 text-xl">{f.icon}</div>
+              <div className="grid h-11 w-11 place-items-center rounded-xl bg-teal/10 text-xl text-teal">{renderIcon(f.icon)}</div>
               <h3 className="mt-4 font-display text-lg font-semibold">{f.title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted">{f.desc}</p>
             </div>

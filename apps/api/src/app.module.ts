@@ -24,6 +24,7 @@ import { SettingsModule } from './settings/settings.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { CheckoutModule } from './checkout/checkout.module';
 import { BillingModule } from './billing/billing.module';
+import { BotApiModule } from './botapi/botapi.module';
 import { SeedModule } from './seed/seed.module';
 
 @Module({
@@ -58,6 +59,8 @@ import { SeedModule } from './seed/seed.module';
     AssistantModule,
     CheckoutModule,
     BillingModule,
+    // Tenant bot API (WhatsApp commands manage pacotes via API key)
+    BotApiModule,
   ],
 })
 export class AppModule {}

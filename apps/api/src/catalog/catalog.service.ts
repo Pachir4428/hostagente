@@ -4,9 +4,11 @@ import { AuditService } from '../audit/audit.service';
 
 export interface PlanInput {
   name: string;
+  description?: string | null;
   priceMonthly: number;
   maxTransactions: number;
   maxUsers: number;
+  maxBots?: number;
   features?: string[];
   isActive?: boolean;
 }
@@ -24,9 +26,11 @@ export class CatalogService {
     const plan = await this.prisma.plan.create({
       data: {
         name: data.name,
+        description: data.description ?? null,
         priceMonthly: data.priceMonthly,
         maxTransactions: data.maxTransactions,
         maxUsers: data.maxUsers,
+        maxBots: data.maxBots ?? 1,
         features: data.features ?? [],
         isActive: data.isActive ?? true,
       },

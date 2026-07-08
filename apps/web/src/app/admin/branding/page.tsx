@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/useAuth';
 import { AppShell } from '@/components/AppShell';
 import { ADMIN_NAV } from '@/lib/nav';
 import { applyBranding } from '@/lib/branding';
+import { IconPicker } from '@/components/IconPicker';
 
 interface Feature {
   icon?: string;
@@ -67,7 +68,7 @@ export default function AdminBrandingPage() {
     });
   }
   function addFeature() {
-    setB((prev) => ({ ...prev, landing: { ...(prev.landing || {}), features: [...((prev.landing?.features as Feature[]) || []), { icon: '✨', title: '', desc: '' }] } }));
+    setB((prev) => ({ ...prev, landing: { ...(prev.landing || {}), features: [...((prev.landing?.features as Feature[]) || []), { icon: 'fa-solid fa-star', title: '', desc: '' }] } }));
   }
   function removeFeature(i: number) {
     setB((prev) => ({ ...prev, landing: { ...(prev.landing || {}), features: ((prev.landing?.features as Feature[]) || []).filter((_, x) => x !== i) } }));
@@ -182,8 +183,8 @@ export default function AdminBrandingPage() {
             <p className="card p-4 text-sm text-muted">Sem cartões personalizados — a landing usa os predefinidos. Adiciona para substituir.</p>
           )}
           {((L.features as Feature[]) || []).map((f, i) => (
-            <div key={i} className="card grid gap-2 p-4 sm:grid-cols-[60px_1fr_auto] sm:items-start">
-              <input value={f.icon || ''} onChange={(e) => setFeature(i, 'icon', e.target.value)} placeholder="⚡" className="field text-center" />
+            <div key={i} className="card grid gap-2 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-start">
+              <IconPicker value={f.icon || 'fa-solid fa-star'} onChange={(v) => setFeature(i, 'icon', v)} />
               <div className="grid gap-2">
                 <input value={f.title || ''} onChange={(e) => setFeature(i, 'title', e.target.value)} placeholder="Título" className="field text-sm" />
                 <input value={f.desc || ''} onChange={(e) => setFeature(i, 'desc', e.target.value)} placeholder="Descrição" className="field text-sm" />

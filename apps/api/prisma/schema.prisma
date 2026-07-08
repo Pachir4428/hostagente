@@ -59,9 +59,11 @@ enum BotStatus {
 model Plan {
   id              String   @id @default(uuid())
   name            String   @unique
+  description     String? // short marketing description
   priceMonthly    Float    @default(0)
   maxTransactions Int      @default(1000)
   maxUsers        Int      @default(1)
+  maxBots         Int      @default(1)
   features        String[]
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())

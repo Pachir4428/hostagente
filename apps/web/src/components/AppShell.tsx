@@ -71,7 +71,6 @@ export function AppShell({
         })}
       </nav>
       <div className="border-t border-line p-3">
-        {email && <p className="truncate px-3 pb-2 text-xs text-muted">{email}</p>}
         <button
           onClick={logout}
           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted transition hover:bg-hover hover:text-ink"
@@ -133,7 +132,10 @@ export function AppShell({
                       <p className="truncate text-sm font-medium">{email || '—'}</p>
                     </div>
                     <Link href="/dashboard/account" onClick={() => setMenu(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-muted transition hover:bg-hover hover:text-ink">
-                      <i className="fa-solid fa-user w-4 text-center" /> Conta &amp; API
+                      <i className="fa-solid fa-user-pen w-4 text-center" /> Editar perfil
+                    </Link>
+                    <Link href="/dashboard/account" onClick={() => setMenu(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-muted transition hover:bg-hover hover:text-ink">
+                      <i className="fa-solid fa-key w-4 text-center" /> Conta &amp; API
                     </Link>
                     <button onClick={logout} className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-danger transition hover:bg-hover">
                       <i className="fa-solid fa-right-from-bracket w-4 text-center" /> Sair
