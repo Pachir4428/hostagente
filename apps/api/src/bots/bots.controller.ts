@@ -77,6 +77,11 @@ export class BotsController {
     return this.service.live(user.tenantId!, id);
   }
 
+  @Post(':id/logs/clear')
+  clearLogs(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.service.clearLogs(user.tenantId!, id);
+  }
+
   @Get(':id/script')
   getScript(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.service.getScript(user.tenantId!, id);

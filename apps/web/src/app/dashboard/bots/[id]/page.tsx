@@ -21,6 +21,13 @@ interface FileNode {
   type: 'file' | 'dir';
   size: number;
 }
+interface Group {
+  name: string;
+  description?: string;
+  admins?: string[];
+  services?: string[];
+  participants?: number;
+}
 
 const STATUS: Record<string, { label: string; chip: string; dot: string }> = {
   connected: { label: 'A correr', chip: 'bg-teal/10 text-teal border border-teal/25', dot: 'bg-teal' },
@@ -67,7 +74,11 @@ export default function BotConsolePage() {
   const [startCmd, setStartCmd] = useState('');
   const [workdir, setWorkdir] = useState('');
   const [savingCfg, setSavingCfg] = useState(false);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [editingName, setEditingName] = useState(false);
+  const [nameVal, setNameVal] = useState('');
   const logsRef = useRef<HTMLDivElement>(null);
+  const autoScroll = useRef(true);
   const cmdHistory = useRef<string[]>([]);
 
   async function loadBot() {
@@ -75,6 +86,28 @@ export default function BotConsolePage() {
     setBot(res.data);
     setStartCmd(res.data?.config?.startCommand || '');
     setWorkdir(res.data?.config?.workdir || '');
+    setNameVal(res.data?.name || '');
+  }
+
+  async function saveName() {
+    const name = nameVal.trim();
+    if (!name) return;
+    try {
+      await authApi.patch(`/bots/${id}`, { name });
+      setEditingName(false);
+      await loadBot();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Não foi possível guardar o nome');
+    }
+  }
+
+  async function clearTerminal() {
+    setLogs([]);
+    try {
+      await authApi.post(`/bots/${id}/logs/clear`);
+    } catch {
+      /* ignore */
+    }
   }
 
   async function saveStartConfig() {
@@ -96,6 +129,7 @@ export default function BotConsolePage() {
       setStatus(res.data.status);
       setLogs(res.data.logs || []);
       setStats(res.data.stats || null);
+      setGroups(res.data.groups || []);
     } catch {
       /* ignore */
     }
@@ -119,9 +153,19 @@ export default function BotConsolePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
+  // Only auto-scroll to the newest line when the user is already near the
+  // bottom — so scrolling up to read isn't yanked back down by the 2s poll.
   useEffect(() => {
-    if (logsRef.current) logsRef.current.scrollTop = logsRef.current.scrollHeight;
+    if (autoScroll.current && logsRef.current) {
+      logsRef.current.scrollTop = logsRef.current.scrollHeight;
+    }
   }, [logs]);
+
+  function onLogsScroll() {
+    const el = logsRef.current;
+    if (!el) return;
+    autoScroll.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  }
 
   async function control(action: 'start' | 'stop' | 'restart') {
     setBusy(action);
@@ -240,6 +284,28 @@ export default function BotConsolePage() {
       <Link href="/dashboard/bots" className="mb-4 inline-flex items-center gap-2 text-sm text-muted hover:text-ink">
         <i className="fa-solid fa-arrow-left" /> Voltar aos bots
       </Link>
+
+      {/* Editable name */}
+      <div className="mb-5 flex items-center gap-2">
+        {editingName ? (
+          <>
+            <input
+              value={nameVal}
+              onChange={(e) => setNameVal(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && saveName()}
+              autoFocus
+              className="field max-w-xs font-display text-xl font-bold"
+            />
+            <button onClick={saveName} className="btn-primary !px-3 !py-1.5 text-sm">Guardar</button>
+            <button onClick={() => { setEditingName(false); setNameVal(bot.name); }} className="btn-ghost !px-3 !py-1.5 text-sm">Cancelar</button>
+          </>
+        ) : (
+          <>
+            <h2 className="font-display text-2xl font-bold">{bot.name}</h2>
+            <button onClick={() => setEditingName(true)} className="text-muted transition hover:text-teal" title="Editar nome"><i className="fa-solid fa-pen text-sm" /></button>
+          </>
+        )}
+      </div>
 
       {/* Controls */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -366,9 +432,9 @@ export default function BotConsolePage() {
           <div className="card flex max-h-[600px] flex-col overflow-hidden">
             <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
               <span className="font-display text-sm font-semibold"><i className="fa-solid fa-terminal mr-2 text-teal" />Terminal</span>
-              <button onClick={() => setLogs([])} className="text-xs text-muted hover:text-ink">limpar</button>
+              <button onClick={clearTerminal} className="text-xs text-muted hover:text-ink"><i className="fa-solid fa-eraser mr-1" />limpar</button>
             </div>
-            <div ref={logsRef} className="flex-1 overflow-y-auto bg-[#0b0f14] p-4 font-mono text-[13px] leading-relaxed text-[#c9d1d9]">
+            <div ref={logsRef} onScroll={onLogsScroll} className="flex-1 overflow-y-auto bg-[#0b0f14] p-4 font-mono text-[13px] leading-relaxed text-[#c9d1d9]">
               {logs.length === 0 ? (
                 <p className="text-[#6e7681]">Sem output. Carrega um projeto e clica em Iniciar, ou escreve um comando abaixo…</p>
               ) : (
@@ -392,6 +458,66 @@ export default function BotConsolePage() {
               <button onClick={sendCommand} className="btn-primary !px-3 !py-1 text-xs">Enviar</button>
             </div>
           </div>
+        </div>
+
+        {/* WhatsApp groups */}
+        <div className="mt-6">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-display text-lg font-bold"><i className="fa-brands fa-whatsapp mr-2 text-teal" />Grupos do WhatsApp</h3>
+            {groups.length > 0 && (
+              <div className="flex gap-2 text-xs">
+                <span className="chip border border-line bg-hover text-muted">{groups.length} grupo(s)</span>
+                <span className="chip border border-line bg-hover text-muted">
+                  {groups.reduce((n, g) => n + (g.services?.length || 0), 0)} serviço(s) ativo(s)
+                </span>
+              </div>
+            )}
+          </div>
+          {groups.length === 0 ? (
+            <div className="card p-6 text-center">
+              <i className="fa-solid fa-people-group text-2xl text-muted2" />
+              <p className="mt-2 text-sm text-muted">Sem grupos ainda. Quando o bot ligar ao WhatsApp e reportar os grupos, aparecem aqui — nome, descrição, admins e serviços ativos de cada grupo.</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {groups.map((g, i) => (
+                <div key={i} className="card flex flex-col p-5 transition hover:border-teal/30">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-teal/10 text-teal"><i className="fa-solid fa-users" /></span>
+                    <div className="min-w-0">
+                      <p className="truncate font-display font-semibold" title={g.name}>{g.name}</p>
+                      {typeof g.participants === 'number' && (
+                        <p className="text-xs text-muted">{g.participants} participantes</p>
+                      )}
+                    </div>
+                  </div>
+                  {g.description && <p className="mt-3 line-clamp-3 text-sm text-muted">{g.description}</p>}
+
+                  {g.services && g.services.length > 0 && (
+                    <div className="mt-4">
+                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted2">Serviços ativos</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {g.services.map((sv, j) => (
+                          <span key={j} className="chip border border-teal/25 bg-teal/10 text-teal">{sv}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {g.admins && g.admins.length > 0 && (
+                    <div className="mt-4">
+                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted2">Administradores</p>
+                      <div className="space-y-1">
+                        {g.admins.map((a, j) => (
+                          <p key={j} className="flex items-center gap-2 text-sm text-muted"><i className="fa-solid fa-user-shield text-xs text-gold" />{a}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         </>
       )}

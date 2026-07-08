@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Post } from '@nestjs/common';
 import { BotApiService } from './botapi.service';
 
 // Public API for tenant bots (WhatsApp/Baileys) — authenticated with the
@@ -18,6 +18,16 @@ export class BotApiController {
     @Body() body: { amount: number; description: string; megabytes?: number | null; operator?: 'mpesa' | 'emola' | 'mkesh' | null; active?: boolean },
   ) {
     return this.service.upsert(apiKey, body);
+  }
+
+  // The bot reports the WhatsApp groups it belongs to.
+  @Post('bots/:id/groups')
+  reportGroups(
+    @Headers('x-api-key') apiKey: string,
+    @Param('id') id: string,
+    @Body() body: { groups: { name?: string; description?: string; admins?: string[]; services?: string[]; participants?: number }[] },
+  ) {
+    return this.service.reportGroups(apiKey, id, body?.groups || []);
   }
 
   @Delete('products')

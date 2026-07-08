@@ -125,12 +125,13 @@ export class BotsService {
   async live(tenantId: string, id: string) {
     await this.get(tenantId, id);
     try {
-      const [status, qr, pairing, logs, statsRaw] = await Promise.all([
+      const [status, qr, pairing, logs, statsRaw, groupsRaw] = await Promise.all([
         this.redis.get(`bot:${id}:status`),
         this.redis.get(`bot:${id}:qr`),
         this.redis.get(`bot:${id}:pairing`),
         this.redis.lrange(`bot:${id}:logs`, -200, -1),
         this.redis.get(`bot:${id}:stats`),
+        this.redis.get(`bot:${id}:groups`),
       ]);
       // Keep the DB status roughly in sync for the list view.
       if (status) {
@@ -144,10 +145,27 @@ export class BotsService {
       } catch {
         stats = null;
       }
-      return { status: status || 'stopped', qr, pairing, logs: logs || [], stats };
+      let groups: any[] = [];
+      try {
+        groups = groupsRaw ? JSON.parse(groupsRaw) : [];
+      } catch {
+        groups = [];
+      }
+      return { status: status || 'stopped', qr, pairing, logs: logs || [], stats, groups };
     } catch {
-      return { status: 'stopped', qr: null, pairing: null, logs: [], stats: null, redisError: true };
+      return { status: 'stopped', qr: null, pairing: null, logs: [], stats: null, groups: [], redisError: true };
     }
+  }
+
+  /** Clear the bot's terminal log buffer (server-side, so it stays cleared). */
+  async clearLogs(tenantId: string, id: string) {
+    await this.get(tenantId, id);
+    try {
+      await this.redis.del(`bot:${id}:logs`);
+    } catch {
+      /* ignore */
+    }
+    return { success: true };
   }
 
   /** Save a single-file bot (bot.js) into the project dir. */
