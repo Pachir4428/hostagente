@@ -82,6 +82,9 @@ export default function BotConsolePage() {
   const [scriptOpen, setScriptOpen] = useState(false);
   const [script, setScript] = useState('');
   const [runningScript, setRunningScript] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [copied, setCopied] = useState('');
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
   const logsRef = useRef<HTMLDivElement>(null);
   const autoScroll = useRef(true);
   const cmdHistory = useRef<string[]>([]);
@@ -153,10 +156,32 @@ export default function BotConsolePage() {
     loadBot();
     loadLive();
     loadFiles();
+    authApi.get('/account/api-keys').then((r) => setApiKey(r.data?.[0]?.key || '')).catch(() => {});
     const iv = setInterval(loadLive, 2000);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  function copy(text: string, label: string) {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(label);
+      setTimeout(() => setCopied(''), 1500);
+    });
+  }
+
+  async function downloadProject() {
+    try {
+      const res = await authApi.get(`/bots/${id}/download`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bot-${bot?.name || id}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Não foi possível descarregar. Carrega um projeto primeiro.');
+    }
+  }
 
   // Only auto-scroll to the newest line when the user is already near the
   // bottom — so scrolling up to read isn't yanked back down by the 2s poll.
@@ -196,6 +221,7 @@ export default function BotConsolePage() {
       const fd = new FormData();
       fd.append('file', file);
       const res = await authApi.post(`/bots/${id}/upload`, fd);
+      setLogs((prev) => [...prev, `✅ ZIP carregado: ${file.name} (${Math.round(file.size / 1024)} KB). Inicia/Reinicia para correr.`]);
       alert(res.data?.message || 'Projeto carregado.');
       await loadBot();
       setTimeout(loadFiles, 500);
@@ -218,6 +244,7 @@ export default function BotConsolePage() {
         fd.append(rel, f, f.name);
       }
       const res = await authApi.post(`/bots/${id}/files`, fd);
+      setLogs((prev) => [...prev, `✅ ${res.data?.count ?? 0} ficheiro(s) carregado(s).`]);
       alert(`${res.data?.count ?? 0} ficheiro(s) carregado(s).`);
       await loadBot();
       loadFiles();
@@ -407,12 +434,46 @@ export default function BotConsolePage() {
           </p>
         </div>
 
+        {/* Panel API credentials — for the bot to talk back to HostAgente */}
+        <div className="card mb-5 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <i className="fa-solid fa-plug text-teal" />
+            <span className="font-display text-sm font-semibold">Ligar o bot ao painel</span>
+            <span className="text-xs text-muted">— usa estes valores no teu bot (PAINEL_API_URL / KEY / BOT_ID)</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <CredField label="BOT_ID" value={id} onCopy={() => copy(id, 'id')} copied={copied === 'id'} />
+            <CredField label="API_URL" value={apiBase} onCopy={() => copy(apiBase, 'url')} copied={copied === 'url'} />
+            <CredField label="API_KEY" value={apiKey} secret onCopy={() => copy(apiKey, 'key')} copied={copied === 'key'} />
+          </div>
+          <div className="mt-3 rounded-lg bg-[#0b0f14] p-3">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-xs text-muted">Variáveis de ambiente</span>
+              <button
+                onClick={() => copy(`export PAINEL_API_URL=${apiBase}\nexport PAINEL_API_KEY=${apiKey}\nexport PAINEL_BOT_ID=${id}`, 'env')}
+                className="text-xs text-teal hover:underline"
+              >
+                {copied === 'env' ? 'copiado ✓' : 'copiar tudo'}
+              </button>
+            </div>
+            <pre className="overflow-x-auto font-mono text-[12px] leading-relaxed text-[#c9d1d9]">{`export PAINEL_API_URL=${apiBase || 'http://SEU_IP:3000'}
+export PAINEL_API_KEY=${apiKey || 'a-tua-chave'}
+export PAINEL_BOT_ID=${id}`}</pre>
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            A API key é a mesma de <Link href="/dashboard/account" className="text-teal hover:underline">Conta &amp; API</Link>. Endpoints do bot: <span className="font-mono">/bot-api/products</span>, <span className="font-mono">/bot-api/bots/{'{id}'}/groups</span>, <span className="font-mono">/bot-api/bots/{'{id}'}/info</span>.
+          </p>
+        </div>
+
         <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
           {/* File manager */}
           <div className="card flex max-h-[600px] flex-col overflow-hidden">
             <div className="flex items-center justify-between border-b border-line px-3 py-2.5">
               <span className="font-display text-sm font-semibold"><i className="fa-solid fa-folder-tree mr-2 text-teal" />Ficheiros</span>
-              <button onClick={loadFiles} className="text-xs text-muted hover:text-ink" title="Atualizar"><i className="fa-solid fa-rotate" /></button>
+              <div className="flex items-center gap-3">
+                <button onClick={downloadProject} className="text-xs text-muted hover:text-teal" title="Descarregar projeto (.zip)"><i className="fa-solid fa-download" /></button>
+                <button onClick={loadFiles} className="text-xs text-muted hover:text-ink" title="Atualizar"><i className="fa-solid fa-rotate" /></button>
+              </div>
             </div>
             <div className="flex flex-wrap gap-1.5 border-b border-line p-2">
               <label className="btn-ghost cursor-pointer !px-2.5 !py-1 text-xs" title="ZIP do projeto">
@@ -615,5 +676,20 @@ export default function BotConsolePage() {
         </div>
       )}
     </AppShell>
+  );
+}
+
+function CredField({ label, value, secret, onCopy, copied }: { label: string; value: string; secret?: boolean; onCopy: () => void; copied: boolean }) {
+  const shown = secret && value ? value.slice(0, 6) + '••••••' + value.slice(-4) : value;
+  return (
+    <div className="rounded-lg border border-line bg-hover px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted2">{label}</p>
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate font-mono text-xs" title={value}>{shown || '—'}</span>
+        <button onClick={onCopy} className="shrink-0 text-xs text-teal hover:text-teal-dark" title="Copiar">
+          <i className={`fa-solid ${copied ? 'fa-check' : 'fa-copy'}`} />
+        </button>
+      </div>
+    </div>
   );
 }

@@ -7,11 +7,13 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/roles.guard';
@@ -80,6 +82,11 @@ export class BotsController {
   @Post(':id/logs/clear')
   clearLogs(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.service.clearLogs(user.tenantId!, id);
+  }
+
+  @Get(':id/download')
+  download(@CurrentUser() user: AuthUser, @Param('id') id: string, @Res() res: Response) {
+    return this.service.downloadProject(user.tenantId!, id, res);
   }
 
   @Get(':id/script')

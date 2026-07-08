@@ -12,6 +12,11 @@ export class BotApiController {
     return this.service.list(apiKey);
   }
 
+  @Get('bots/:id/info')
+  info(@Headers('x-api-key') apiKey: string, @Param('id') id: string) {
+    return this.service.info(apiKey, id);
+  }
+
   @Post('products')
   upsert(
     @Headers('x-api-key') apiKey: string,

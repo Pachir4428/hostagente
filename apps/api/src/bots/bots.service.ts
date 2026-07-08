@@ -157,6 +157,27 @@ export class BotsService {
     }
   }
 
+  /** Stream the bot's project folder as a .zip download (excludes node_modules/.git). */
+  async downloadProject(tenantId: string, id: string, res: any) {
+    await this.get(tenantId, id);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const archiver = require('archiver');
+    const dir = path.join(PROJECTS_DIR, id);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="bot-${id}.zip"`);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', () => {
+      try {
+        res.status(500).end();
+      } catch {
+        /* ignore */
+      }
+    });
+    archive.pipe(res);
+    archive.glob('**/*', { cwd: dir, ignore: ['node_modules/**', '.git/**'], dot: true });
+    await archive.finalize();
+  }
+
   /** Clear the bot's terminal log buffer (server-side, so it stays cleared). */
   async clearLogs(tenantId: string, id: string) {
     await this.get(tenantId, id);

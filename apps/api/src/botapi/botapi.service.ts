@@ -31,6 +31,14 @@ export class BotApiService {
     return this.products.list(tenantId);
   }
 
+  /** Bot verifies its credentials and reads its own info (for the .sincronizar command). */
+  async info(apiKey: string | undefined, botId: string) {
+    const tenantId = await this.tenantFromKey(apiKey);
+    const bot = await this.prisma.bot.findFirst({ where: { id: botId, tenantId } });
+    if (!bot) throw new UnauthorizedException('Bot não pertence a este tenant');
+    return { id: bot.id, name: bot.name, type: bot.type, status: bot.status };
+  }
+
   /**
    * Upsert a pacote by (amount, operator). If one exists it is updated,
    * otherwise created. Intended to be called from WhatsApp bot commands.
