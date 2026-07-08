@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { getToken } from '@/lib/auth';
 import { Logo } from '@/components/Logo';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { useBranding } from '@/lib/branding';
 
 const features = [
   { icon: '⚡', title: 'Deteção automática', desc: 'O MacroDroid lê o SMS de M-Pesa/e-Mola e a venda é registada em segundos, sem toques.' },
@@ -36,6 +37,9 @@ const faqs = [
 ];
 
 export default function Home() {
+  const brand = useBranding();
+  const L = brand.landing || {};
+  const feats = L.features && L.features.length ? L.features : features;
   const [authed, setAuthed] = useState(false);
   useEffect(() => {
     setAuthed(!!getToken());
@@ -77,16 +81,19 @@ export default function Home() {
       {/* Hero */}
       <section className="mx-auto max-w-6xl px-5 pt-20 pb-16 text-center">
         <span className="chip mx-auto border border-line bg-hover text-muted">
-          Feito para Moçambique · M-Pesa · e-Mola · mKesh
+          {L.badge || 'Feito para Moçambique · M-Pesa · e-Mola · mKesh'}
         </span>
         <h1 className="mx-auto mt-6 max-w-4xl font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl">
-          Vende dados no <span className="text-teal">automático</span>,<br className="hidden sm:block" /> a cada pagamento.
+          {L.heroTitle || 'Vende dados no'}{' '}
+          <span className="bg-gradient-to-r from-teal to-purple bg-clip-text text-transparent">{L.heroHighlight || 'automático'}</span>
+          {L.heroTitle ? '' : ', a cada pagamento.'}
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-muted">
-          Deteta pagamentos M-Pesa e e-Mola com o MacroDroid e entrega pacotes de dados automaticamente. Feito para revendedores em Moçambique.
+          {L.heroSubtitle ||
+            'Deteta pagamentos M-Pesa e e-Mola com o MacroDroid e entrega pacotes de dados automaticamente. Feito para revendedores em Moçambique.'}
         </p>
         <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-          <Link href="/register" className="btn-primary">Criar conta grátis →</Link>
+          <Link href="/register" className="btn-primary">{L.ctaText || 'Criar conta grátis'} →</Link>
           <a href="#pricing" className="btn-ghost">Ver planos</a>
         </div>
 
@@ -112,8 +119,8 @@ export default function Home() {
           <p className="mt-3 text-muted">Uma plataforma, poderes completos.</p>
         </div>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((f) => (
-            <div key={f.title} className="card p-6 transition hover:border-teal/30">
+          {feats.map((f, i) => (
+            <div key={f.title || i} className="card p-6 transition hover:border-teal/30">
               <div className="grid h-11 w-11 place-items-center rounded-xl bg-teal/10 text-xl">{f.icon}</div>
               <h3 className="mt-4 font-display text-lg font-semibold">{f.title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted">{f.desc}</p>
@@ -212,7 +219,7 @@ export default function Home() {
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 text-sm text-muted sm:flex-row">
           <Logo size="sm" />
-          <p>© 2026 HostAgente · Maputo, Moçambique · Feito com meticais 🇲🇿</p>
+          <p>{L.footerNote || '© 2026 HostAgente · Maputo, Moçambique · Feito com meticais 🇲🇿'}</p>
         </div>
       </footer>
     </div>

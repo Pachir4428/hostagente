@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Brand primary colour (RGB channels) — overridable at runtime for white-label. */
+  --c-teal: 34 211 170;
+  --c-teal-dark: 18 181 143;
+}
+
 :root,
 :root[data-theme='dark'] {
   color-scheme: dark;

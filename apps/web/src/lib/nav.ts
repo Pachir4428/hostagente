@@ -19,6 +19,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/billing', label: 'Pagamentos', icon: 'fa-solid fa-file-invoice-dollar' },
   { href: '/admin/reports', label: 'Relatórios', icon: 'fa-solid fa-chart-line' },
   { href: '/admin/settings', label: 'Definições & API', icon: 'fa-solid fa-sliders' },
+  { href: '/admin/branding', label: 'Marca & Landing', icon: 'fa-solid fa-palette' },
   { href: '/admin/support', label: 'Suporte', icon: 'fa-solid fa-headset' },
   { href: '/admin/logs', label: 'Logs & Auditoria', icon: 'fa-solid fa-clipboard-list' },
   { href: '/admin/broadcast', label: 'Comunicados', icon: 'fa-solid fa-bullhorn' },

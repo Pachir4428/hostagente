@@ -34,6 +34,22 @@ export interface SmtpConfig {
   from?: string;
 }
 
+export interface BrandingConfig {
+  appName?: string;
+  logo?: string; // data URI or URL
+  favicon?: string; // data URI or URL
+  primaryColor?: string; // hex, e.g. #22D3AA
+  landing?: {
+    badge?: string;
+    heroTitle?: string;
+    heroHighlight?: string;
+    heroSubtitle?: string;
+    ctaText?: string;
+    features?: { icon?: string; title?: string; desc?: string }[];
+    footerNote?: string;
+  };
+}
+
 // Shown in the admin UI instead of a real secret so credentials never leave the
 // server. Saving this value back keeps the stored secret unchanged.
 const MASK = '••••••';
@@ -52,6 +68,23 @@ const DEFAULT_ASSISTANT: AssistantConfig = {
 };
 
 const DEFAULT_SMTP: SmtpConfig = { enabled: false, port: 587, secure: false };
+
+const DEFAULT_BRANDING: BrandingConfig = {
+  appName: 'HostAgente',
+  logo: '',
+  favicon: '',
+  primaryColor: '#22D3AA',
+  landing: {
+    badge: 'Feito para Moçambique · M-Pesa · e-Mola · mKesh',
+    heroTitle: 'Vende dados no',
+    heroHighlight: 'automático',
+    heroSubtitle:
+      'Deteta pagamentos M-Pesa e e-Mola com o MacroDroid e entrega pacotes de dados automaticamente. Feito para revendedores em Moçambique.',
+    ctaText: 'Criar conta grátis',
+    features: [],
+    footerNote: '© 2026 HostAgente · Maputo, Moçambique 🇲🇿',
+  },
+};
 
 // Secret fields that are encrypted at rest and masked in the admin view.
 const GATEWAY_SECRETS: (keyof GatewayConfig)[] = ['secretKey', 'clientSecret'];
@@ -153,18 +186,36 @@ export class SettingsService {
     return { ...merged, pass: merged.pass ? MASK : '' };
   }
 
+  // ── Branding (white-label) ────────────────────────────────
+  getBranding(): Promise<BrandingConfig> {
+    return this.getRaw<BrandingConfig>('branding', DEFAULT_BRANDING);
+  }
+
+  async saveBranding(value: Partial<BrandingConfig>) {
+    const stored = await this.getBranding();
+    const merged: BrandingConfig = {
+      ...stored,
+      ...value,
+      landing: { ...(stored.landing || {}), ...(value.landing || {}) },
+    };
+    await this.setRaw('branding', merged);
+    return merged;
+  }
+
   // ── Views ─────────────────────────────────────────────────
   /** Config for the SUPER_ADMIN settings page — secrets masked, never leaked. */
   async adminView() {
-    const [gateways, assistant, smtp] = await Promise.all([
+    const [gateways, assistant, smtp, branding] = await Promise.all([
       this.getStoredGateways(),
       this.getRaw<AssistantConfig>('assistant', DEFAULT_ASSISTANT),
       this.getRaw<SmtpConfig>('smtp', DEFAULT_SMTP),
+      this.getBranding(),
     ]);
     return {
       gateways: this.maskedGateways(gateways),
       assistant: { ...assistant, apiKey: assistant.apiKey ? MASK : '' },
       smtp: { ...smtp, pass: smtp.pass ? MASK : '' },
+      branding,
     };
   }
 

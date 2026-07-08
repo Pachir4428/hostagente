@@ -15,9 +15,10 @@ module.exports = {
         muted: 'var(--c-muted)',
         muted2: 'var(--c-muted2)',
         hover: 'var(--c-hover)',
-        // Brand colors — fixed across themes.
-        teal: '#22D3AA',
-        'teal-dark': '#12B58F',
+        // Brand colors — driven by CSS vars so the super admin can white-label
+        // the primary colour at runtime. RGB channels keep /opacity utilities working.
+        teal: 'rgb(var(--c-teal) / <alpha-value>)',
+        'teal-dark': 'rgb(var(--c-teal-dark) / <alpha-value>)',
         'teal-ink': '#04120D',
         purple: '#8B5CF6',
         'purple-soft': '#C9B8FF',
