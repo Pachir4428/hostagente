@@ -25,7 +25,7 @@ export class BotApiController {
   reportGroups(
     @Headers('x-api-key') apiKey: string,
     @Param('id') id: string,
-    @Body() body: { groups: { name?: string; description?: string; admins?: string[]; services?: string[]; participants?: number }[] },
+    @Body() body: { groups: { name?: string; description?: string; admins?: string[]; services?: string[]; participants?: number; plan?: string; active?: boolean }[] },
   ) {
     return this.service.reportGroups(apiKey, id, body?.groups || []);
   }

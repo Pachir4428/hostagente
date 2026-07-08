@@ -60,7 +60,15 @@ export class BotApiService {
   async reportGroups(
     apiKey: string | undefined,
     botId: string,
-    groups: { name?: string; description?: string; admins?: string[]; services?: string[]; participants?: number }[],
+    groups: {
+      name?: string;
+      description?: string;
+      admins?: string[];
+      services?: string[];
+      participants?: number;
+      plan?: string;
+      active?: boolean;
+    }[],
   ) {
     const tenantId = await this.tenantFromKey(apiKey);
     const bot = await this.prisma.bot.findFirst({ where: { id: botId, tenantId } });
@@ -71,6 +79,9 @@ export class BotApiService {
       admins: Array.isArray(g.admins) ? g.admins.slice(0, 50).map(String) : [],
       services: Array.isArray(g.services) ? g.services.slice(0, 50).map(String) : [],
       participants: typeof g.participants === 'number' ? g.participants : undefined,
+      plan: g.plan ? String(g.plan).slice(0, 60) : undefined,
+      // Whether the group's subscription is active (bot only serves active ones).
+      active: typeof g.active === 'boolean' ? g.active : undefined,
     }));
     try {
       await this.redis.set(`bot:${botId}:groups`, JSON.stringify(clean), 'EX', 60 * 60 * 24 * 7);

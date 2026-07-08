@@ -27,6 +27,8 @@ interface Group {
   admins?: string[];
   services?: string[];
   participants?: number;
+  plan?: string;
+  active?: boolean;
 }
 
 const STATUS: Record<string, { label: string; chip: string; dot: string }> = {
@@ -77,6 +79,9 @@ export default function BotConsolePage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [editingName, setEditingName] = useState(false);
   const [nameVal, setNameVal] = useState('');
+  const [scriptOpen, setScriptOpen] = useState(false);
+  const [script, setScript] = useState('');
+  const [runningScript, setRunningScript] = useState(false);
   const logsRef = useRef<HTMLDivElement>(null);
   const autoScroll = useRef(true);
   const cmdHistory = useRef<string[]>([]);
@@ -259,6 +264,26 @@ export default function BotConsolePage() {
       setTimeout(loadFiles, 1500);
     } catch {
       /* ignore */
+    }
+  }
+
+  // Run a multi-line script/heredoc block (e.g. cat > src/file.js <<'EOF' … EOF)
+  // to update code directly from the panel.
+  async function runScript() {
+    const s = script.trim();
+    if (!s) return;
+    setRunningScript(true);
+    setLogs((prev) => [...prev, '$ (script)', ...s.split('\n').map((l) => '  ' + l)]);
+    try {
+      const res = await authApi.post(`/bots/${id}/command`, { command: s });
+      if (res.data?.success === false) {
+        setLogs((prev) => [...prev, res.data.message || 'O bot precisa de estar a correr.']);
+      }
+      setTimeout(loadFiles, 1500);
+    } catch {
+      /* ignore */
+    } finally {
+      setRunningScript(false);
     }
   }
 
@@ -456,9 +481,40 @@ export default function BotConsolePage() {
                 className="flex-1 bg-transparent font-mono text-[13px] text-[#c9d1d9] placeholder:text-[#6e7681] focus:outline-none"
               />
               <button onClick={sendCommand} className="btn-primary !px-3 !py-1 text-xs">Enviar</button>
+              <button onClick={() => setScriptOpen((o) => !o)} className="btn-ghost !px-3 !py-1 text-xs" title="Script multi-linha / EOF">
+                <i className="fa-solid fa-code" />
+              </button>
             </div>
           </div>
         </div>
+
+        {/* Multi-line script / EOF runner — update code directly */}
+        {scriptOpen && (
+          <div className="mt-4 card overflow-hidden">
+            <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+              <span className="font-display text-sm font-semibold"><i className="fa-solid fa-scroll mr-2 text-teal" />Atualizar por script (EOF)</span>
+              <button onClick={() => setScriptOpen(false)} className="text-xs text-muted hover:text-ink"><i className="fa-solid fa-xmark" /></button>
+            </div>
+            <div className="p-3">
+              <p className="mb-2 text-xs text-muted">
+                Cola um bloco de comandos (aceita heredoc/EOF) para atualizar ficheiros ou instalar dependências sem sair do painel. Corre na pasta do projeto.
+              </p>
+              <textarea
+                value={script}
+                onChange={(e) => setScript(e.target.value)}
+                spellCheck={false}
+                placeholder={"cat > src/comandos/novo.js <<'EOF'\nmodule.exports = () => { /* nova funcionalidade */ };\nEOF\nnpm install dayjs"}
+                className="w-full min-h-[160px] rounded-lg bg-[#0b0f14] p-3 font-mono text-[13px] text-[#c9d1d9] placeholder:text-[#6e7681] focus:outline-none"
+              />
+              <div className="mt-2 flex justify-end gap-2">
+                <button onClick={() => setScript('')} className="btn-ghost !py-1.5 text-xs">Limpar</button>
+                <button onClick={runScript} disabled={runningScript} className="btn-primary !py-1.5 text-xs">
+                  {runningScript ? 'A correr…' : 'Correr script'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* WhatsApp groups */}
         <div className="mt-6">
@@ -470,6 +526,11 @@ export default function BotConsolePage() {
                 <span className="chip border border-line bg-hover text-muted">
                   {groups.reduce((n, g) => n + (g.services?.length || 0), 0)} serviço(s) ativo(s)
                 </span>
+                {groups.some((g) => g.active !== undefined) && (
+                  <span className="chip border border-teal/25 bg-teal/10 text-teal">
+                    {groups.filter((g) => g.active).length} assinatura(s) ativa(s)
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -481,16 +542,26 @@ export default function BotConsolePage() {
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {groups.map((g, i) => (
-                <div key={i} className="card flex flex-col p-5 transition hover:border-teal/30">
+                <div key={i} className={`card flex flex-col p-5 transition hover:border-teal/30 ${g.active === false ? 'opacity-60' : ''}`}>
                   <div className="flex items-start gap-3">
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-teal/10 text-teal"><i className="fa-solid fa-users" /></span>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="truncate font-display font-semibold" title={g.name}>{g.name}</p>
                       {typeof g.participants === 'number' && (
                         <p className="text-xs text-muted">{g.participants} participantes</p>
                       )}
                     </div>
+                    {g.active !== undefined && (
+                      <span className={`chip ${g.active ? 'bg-teal/10 text-teal border border-teal/25' : 'bg-danger/10 text-danger border border-danger/25'}`}>
+                        {g.active ? 'Ativa' : 'Inativa'}
+                      </span>
+                    )}
                   </div>
+                  {g.plan && (
+                    <div className="mt-3">
+                      <span className="chip border border-gold/25 bg-gold/10 text-gold"><i className="fa-solid fa-star mr-1" />Plano {g.plan}</span>
+                    </div>
+                  )}
                   {g.description && <p className="mt-3 line-clamp-3 text-sm text-muted">{g.description}</p>}
 
                   {g.services && g.services.length > 0 && (
