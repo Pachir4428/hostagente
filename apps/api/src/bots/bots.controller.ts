@@ -166,6 +166,11 @@ export class BotsController {
     return this.service.addGroup(user.tenantId!, id, body);
   }
 
+  @Post(':id/groups/sync')
+  syncGroups(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.service.requestSync(user.tenantId!, id);
+  }
+
   @Delete(':id/groups/:groupId')
   removeGroup(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('groupId') groupId: string) {
     return this.service.removeGroup(user.tenantId!, id, groupId);

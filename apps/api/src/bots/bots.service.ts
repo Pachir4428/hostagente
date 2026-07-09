@@ -250,6 +250,19 @@ export class BotsService {
     return { success: true };
   }
 
+  /** Ask the running bot to scan its WhatsApp groups now and report back. */
+  async requestSync(tenantId: string, id: string) {
+    await this.get(tenantId, id);
+    try {
+      await this.redis.publish(`bot:${id}:sync`, Date.now().toString());
+      await this.redis.rpush(`bot:${id}:logs`, '🔄 Varredura de grupos pedida ao bot…');
+      await this.redis.ltrim(`bot:${id}:logs`, -800, -1);
+      return { success: true };
+    } catch {
+      return { success: false, message: 'Redis indisponível — o bot precisa de estar a correr.' };
+    }
+  }
+
   async removeGroup(tenantId: string, id: string, groupId: string) {
     const bot = await this.get(tenantId, id);
     const cfg: any = (bot.config as any) || {};

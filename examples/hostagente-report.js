@@ -78,11 +78,32 @@ async function reportGroups(sock, opts = {}) {
   console.log(`[HostAgente] Reportei ${groups.length} grupo(s):`, out);
 }
 
-/** Reporta agora e depois a cada `intervalMs` (default 5 min). */
+/**
+ * Reporta agora, a cada `intervalMs` (default 5 min) E também sob demanda:
+ * quando clicas em "Varrer grupos" no painel (ou adicionas um grupo pelo ID),
+ * o painel publica no canal Redis `bot:<BOT_ID>:sync` e o bot varre logo.
+ * A subscrição do Redis é opcional (só ativa se o pacote `ioredis` existir).
+ */
 function startReporting(sock, opts = {}, intervalMs = 5 * 60 * 1000) {
   const run = () => reportGroups(sock, opts).catch((e) => console.log('[HostAgente]', e.message));
   run();
-  return setInterval(run, intervalMs);
+  const timer = setInterval(run, intervalMs);
+
+  // Varredura sob demanda via Redis (o container já tem REDIS_URL).
+  try {
+    // eslint-disable-next-line global-require
+    const Redis = require('ioredis');
+    const sub = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
+    sub.on('error', () => {});
+    sub.subscribe(`bot:${BOT_ID}:sync`).catch(() => {});
+    sub.on('message', () => {
+      console.log('[HostAgente] Varredura pedida pelo painel — a reportar grupos…');
+      run();
+    });
+  } catch {
+    console.log('[HostAgente] ioredis não instalado — varredura sob demanda desativada (usa só o intervalo).');
+  }
+  return timer;
 }
 
 module.exports = { startReporting, reportGroups, detectServices };

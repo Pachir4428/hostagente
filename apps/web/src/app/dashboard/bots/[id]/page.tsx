@@ -406,11 +406,22 @@ module.exports = {
         validUntil: groupForm.validUntil || undefined,
       });
       setGroupForm(null);
+      // Ask the bot to scan this group now and fill in the details.
+      await authApi.post(`/bots/${id}/groups/sync`).catch(() => {});
       await loadLive();
     } catch (e: any) {
       alert(e.response?.data?.message || 'Não foi possível adicionar');
     } finally {
       setSavingGroup(false);
+    }
+  }
+  async function syncGroups() {
+    try {
+      const res = await authApi.post(`/bots/${id}/groups/sync`);
+      if (res.data?.success === false) alert(res.data.message || 'O bot precisa de estar a correr.');
+      setTimeout(loadLive, 1500);
+    } catch {
+      /* ignore */
     }
   }
   async function removeGroup(gid?: string) {
@@ -716,6 +727,9 @@ export PAINEL_BOT_ID=${id}`}</pre>
                   )}
                 </>
               )}
+              <button onClick={syncGroups} className="btn-ghost !px-3 !py-1 text-xs" title="Pedir ao bot para varrer os grupos agora">
+                <i className="fa-solid fa-rotate" /> Varrer
+              </button>
               <button onClick={() => setGroupForm({ id: '', name: '', plan: '', validUntil: '' })} className="btn-primary !px-3 !py-1 text-xs">
                 <i className="fa-solid fa-plus" /> Adicionar grupo
               </button>
@@ -790,6 +804,9 @@ export PAINEL_BOT_ID=${id}`}</pre>
                     </div>
                   )}
                   {g.description && <p className="mt-3 line-clamp-3 text-sm text-muted">{g.description}</p>}
+                  {g.manual && !g.description && !(g.admins && g.admins.length) && (
+                    <p className="mt-3 text-xs text-muted2"><i className="fa-solid fa-hourglass-half mr-1" />À espera do bot para colher descrição e admins deste ID. Clica em <b>Varrer</b> com o bot ligado.</p>
+                  )}
 
                   {g.services && g.services.length > 0 && (
                     <div className="mt-4">
