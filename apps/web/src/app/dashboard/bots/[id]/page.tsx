@@ -71,6 +71,7 @@ export default function BotConsolePage() {
   const [busy, setBusy] = useState('');
   const [cmd, setCmd] = useState('');
   const [files, setFiles] = useState<FileNode[]>([]);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<{ path: string; content: string } | null>(null);
   const [savingFile, setSavingFile] = useState(false);
   const [startCmd, setStartCmd] = useState('');
@@ -255,6 +256,22 @@ export default function BotConsolePage() {
     } finally {
       setBusy('');
     }
+  }
+
+  function toggleDir(p: string) {
+    setExpanded((prev) => {
+      const n = new Set(prev);
+      n.has(p) ? n.delete(p) : n.add(p);
+      return n;
+    });
+  }
+  // A node is visible only when every ancestor folder is expanded (manual navigation).
+  function isVisible(path: string) {
+    const segs = path.split('/');
+    for (let i = 0; i < segs.length - 1; i++) {
+      if (!expanded.has(segs.slice(0, i + 1).join('/'))) return false;
+    }
+    return true;
   }
 
   async function openFile(path: string) {
@@ -560,16 +577,26 @@ export PAINEL_BOT_ID=${id}`}</pre>
               {files.length === 0 ? (
                 <p className="px-2 py-4 text-xs text-muted">Sem ficheiros. Carrega um ZIP, ficheiros ou uma pasta.</p>
               ) : (
-                files.map((f) => {
-                  const depth = f.path.split('/').length - 1;
-                  const name = f.path.split('/').pop();
+                files.filter((f) => isVisible(f.path)).map((f) => {
+                  const segs = f.path.split('/');
+                  const depth = segs.length - 1;
+                  const name = segs[segs.length - 1];
+                  const isDir = f.type === 'dir';
+                  const isOpen = expanded.has(f.path);
                   return (
                     <div key={f.path} className="group flex items-center gap-1 rounded px-1.5 py-1 hover:bg-hover" style={{ paddingLeft: 6 + depth * 12 }}>
-                      <i className={`fa-solid ${f.type === 'dir' ? 'fa-folder text-gold' : 'fa-file text-muted'} w-4 text-xs`} />
-                      {f.type === 'file' ? (
-                        <button onClick={() => openFile(f.path)} className="flex-1 truncate text-left text-xs text-ink hover:text-teal">{name}</button>
+                      {isDir ? (
+                        <button onClick={() => toggleDir(f.path)} className="flex flex-1 items-center gap-1.5 truncate text-left">
+                          <i className={`fa-solid fa-chevron-right w-3 text-[9px] text-muted transition ${isOpen ? 'rotate-90' : ''}`} />
+                          <i className={`fa-solid ${isOpen ? 'fa-folder-open' : 'fa-folder'} w-4 text-xs text-gold`} />
+                          <span className="truncate text-xs text-ink">{name}</span>
+                        </button>
                       ) : (
-                        <span className="flex-1 truncate text-xs text-muted">{name}</span>
+                        <button onClick={() => openFile(f.path)} className="flex flex-1 items-center gap-1.5 truncate text-left">
+                          <span className="w-3" />
+                          <i className="fa-solid fa-file w-4 text-xs text-muted" />
+                          <span className="truncate text-xs text-ink hover:text-teal">{name}</span>
+                        </button>
                       )}
                       <button onClick={() => deleteFile(f.path)} className="text-xs text-muted opacity-0 transition hover:text-danger group-hover:opacity-100" title="Apagar"><i className="fa-solid fa-xmark" /></button>
                     </div>

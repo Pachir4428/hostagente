@@ -65,23 +65,29 @@ export class BotApiService {
    * admin numbers, active services). Verified to belong to the tenant, then
    * cached in Redis for the panel to display.
    */
-  async reportGroups(
-    apiKey: string | undefined,
-    botId: string,
-    groups: {
-      name?: string;
-      description?: string;
-      admins?: string[];
-      services?: string[];
-      participants?: number;
-      plan?: string;
-      active?: boolean;
-    }[],
-  ) {
+  async reportGroups(apiKey: string | undefined, botId: string, rawBody: any) {
     const tenantId = await this.tenantFromKey(apiKey);
     const bot = await this.prisma.bot.findFirst({ where: { id: botId, tenantId } });
     if (!bot) throw new UnauthorizedException('Bot não pertence a este tenant');
-    const clean = (Array.isArray(groups) ? groups : []).slice(0, 200).map((g) => ({
+
+    // Accept several shapes so different bot codebases work without changes:
+    // an array, { groups: [...] }, { chats: [...] }, or { data: [...] }.
+    let groups: any[] = [];
+    if (Array.isArray(rawBody)) groups = rawBody;
+    else if (Array.isArray(rawBody?.groups)) groups = rawBody.groups;
+    else if (Array.isArray(rawBody?.chats)) groups = rawBody.chats;
+    else if (Array.isArray(rawBody?.data)) groups = rawBody.data;
+
+    const norm = (g: any) => ({
+      name: g.name || g.subject || g.title || 'Grupo',
+      description: g.description || g.desc || '',
+      admins: g.admins || g.administrators || [],
+      services: g.services || g.servicos || [],
+      participants: g.participants ?? g.size ?? g.membros,
+      plan: g.plan || g.plano,
+      active: g.active ?? g.ativo,
+    });
+    const clean = (Array.isArray(groups) ? groups : []).slice(0, 200).map(norm).map((g) => ({
       name: String(g.name || 'Grupo'),
       description: g.description ? String(g.description).slice(0, 500) : '',
       admins: Array.isArray(g.admins) ? g.admins.slice(0, 50).map(String) : [],
@@ -93,10 +99,14 @@ export class BotApiService {
     }));
     try {
       await this.redis.set(`bot:${botId}:groups`, JSON.stringify(clean), 'EX', 60 * 60 * 24 * 7);
+      // Diagnostic line in the bot's terminal so the operator can SEE the report arriving.
+      const line = `📡 Painel recebeu ${clean.length} grupo(s) do bot.`;
+      await this.redis.rpush(`bot:${botId}:logs`, line);
+      await this.redis.ltrim(`bot:${botId}:logs`, -800, -1);
     } catch {
       /* ignore */
     }
-    return { success: true, count: clean.length };
+    return { success: true, count: clean.length, received: groups.length };
   }
 
   async remove(apiKey: string | undefined, body: { id?: string; amount?: number; operator?: 'mpesa' | 'emola' | 'mkesh' | null }) {

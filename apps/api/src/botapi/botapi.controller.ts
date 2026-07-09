@@ -27,12 +27,8 @@ export class BotApiController {
 
   // The bot reports the WhatsApp groups it belongs to.
   @Post('bots/:id/groups')
-  reportGroups(
-    @Headers('x-api-key') apiKey: string,
-    @Param('id') id: string,
-    @Body() body: { groups: { name?: string; description?: string; admins?: string[]; services?: string[]; participants?: number; plan?: string; active?: boolean }[] },
-  ) {
-    return this.service.reportGroups(apiKey, id, body?.groups || []);
+  reportGroups(@Headers('x-api-key') apiKey: string, @Param('id') id: string, @Body() body: any) {
+    return this.service.reportGroups(apiKey, id, body);
   }
 
   @Delete('products')
