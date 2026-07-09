@@ -19,7 +19,7 @@ function containerName(botId: string): string {
 export const dockerService = {
   async startBot(
     botId: string,
-    opts: { phone?: string } = {},
+    opts: { phone?: string; apiKey?: string; apiUrl?: string } = {},
   ): Promise<{ success: boolean; containerId?: string; message?: string }> {
     const name = containerName(botId);
 
@@ -41,6 +41,14 @@ export const dockerService = {
           `REDIS_URL=${REDIS_URL}`,
           `PHONE=${opts.phone || ''}`,
           `NODE_ENV=${process.env.NODE_ENV || 'production'}`,
+          // Panel credentials so the tenant's bot can talk back to HostAgente
+          // (report groups, manage pacotes). Exposed under several common names.
+          `PAINEL_API_URL=${opts.apiUrl || 'http://api:3000'}`,
+          `PAINEL_API_KEY=${opts.apiKey || ''}`,
+          `PAINEL_BOT_ID=${botId}`,
+          `HOSTAGENTE_URL=${opts.apiUrl || 'http://api:3000'}`,
+          `HOSTAGENTE_KEY=${opts.apiKey || ''}`,
+          `HOSTAGENTE_BOT_ID=${botId}`,
         ],
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },

@@ -9,6 +9,8 @@ const RUNNER_URL = process.env.RUNNER_INTERNAL_URL || 'http://bot-runner:4001';
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || '';
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const PROJECTS_DIR = process.env.PROJECTS_DIR || '/data/projects';
+// Internal URL the bot container uses to reach the API over the docker network.
+const SELF_API_URL = process.env.SELF_API_URL || 'http://api:3000';
 
 @Injectable()
 export class BotsService {
@@ -17,6 +19,15 @@ export class BotsService {
 
   constructor(private prisma: PrismaService) {
     this.redis.on('error', () => {}); // don't crash on redis blips
+  }
+
+  /** The tenant's active API key, injected into the bot container so it can report back. */
+  private async tenantApiKey(tenantId: string): Promise<string> {
+    const key = await this.prisma.apiKey.findFirst({
+      where: { tenantId, revoked: false },
+      orderBy: { createdAt: 'desc' },
+    });
+    return key?.key || '';
   }
 
   private runner(method: 'post', url: string, body?: any) {
@@ -71,8 +82,14 @@ export class BotsService {
       return { success: false, message: 'Só bots manuais são executados pela plataforma.' };
     }
     await this.prisma.bot.update({ where: { id }, data: { status: 'starting' } });
+    const apiKey = await this.tenantApiKey(bot.tenantId);
     try {
-      const res = await this.runner('post', '/bots/start', { botId: id, phone: bot.phoneNumber });
+      const res = await this.runner('post', '/bots/start', {
+        botId: id,
+        phone: bot.phoneNumber,
+        apiKey,
+        apiUrl: SELF_API_URL,
+      });
       if (res.data?.containerId) {
         await this.prisma.bot.update({ where: { id }, data: { containerId: res.data.containerId } });
       }
@@ -102,8 +119,14 @@ export class BotsService {
   async restart(tenantId: string, id: string) {
     const bot = await this.get(tenantId, id);
     await this.prisma.bot.update({ where: { id }, data: { status: 'starting' } });
+    const apiKey = await this.tenantApiKey(bot.tenantId);
     try {
-      const res = await this.runner('post', '/bots/restart', { botId: id, phone: bot.phoneNumber });
+      const res = await this.runner('post', '/bots/restart', {
+        botId: id,
+        phone: bot.phoneNumber,
+        apiKey,
+        apiUrl: SELF_API_URL,
+      });
       return res.data;
     } catch (err: any) {
       return { success: false, message: this.runnerError(err) };

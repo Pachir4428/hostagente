@@ -85,6 +85,8 @@ export default function BotConsolePage() {
   const [apiKey, setApiKey] = useState('');
   const [copied, setCopied] = useState('');
   const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+  const [creator, setCreator] = useState<{ type: 'comando' | 'nano'; name: string; path: string; content: string } | null>(null);
+  const [savingCreator, setSavingCreator] = useState(false);
   const logsRef = useRef<HTMLDivElement>(null);
   const autoScroll = useRef(true);
   const cmdHistory = useRef<string[]>([]);
@@ -265,6 +267,7 @@ export default function BotConsolePage() {
     setSavingFile(true);
     try {
       await authApi.post(`/bots/${id}/file`, { path: editing.path, content: editing.content });
+      setLogs((prev) => [...prev, `✅ Ficheiro atualizado: ${editing.path}. Reinicia o bot para carregar as alterações.`]);
       setEditing(null);
       loadFiles();
     } finally {
@@ -311,6 +314,62 @@ export default function BotConsolePage() {
       /* ignore */
     } finally {
       setRunningScript(false);
+    }
+  }
+
+  function openCreator(type: 'comando' | 'nano') {
+    if (type === 'comando') {
+      setCreator({
+        type,
+        name: '',
+        path: 'src/comandos/novo.js',
+        content: `// Comando: novo
+module.exports = {
+  name: 'novo',
+  aliases: [],
+  async execute(sock, msg, args) {
+    const jid = msg.key.remoteJid;
+    await sock.sendMessage(jid, { text: 'Olá! Comando "novo" a funcionar.' });
+  },
+};
+`,
+      });
+    } else {
+      setCreator({
+        type,
+        name: '',
+        path: 'storage/nanos/novo.json',
+        content: `{
+  "nome": "novo",
+  "ativo": true,
+  "gatilho": "!novo",
+  "resposta": "Resposta automática do nano."
+}
+`,
+      });
+    }
+  }
+
+  function updateCreatorName(name: string) {
+    if (!creator) return;
+    const safe = name.trim().replace(/[^\w.-]/g, '_');
+    const ext = creator.type === 'comando' ? 'js' : 'json';
+    const folder = creator.type === 'comando' ? 'src/comandos' : 'storage/nanos';
+    setCreator({ ...creator, name, path: safe ? `${folder}/${safe}.${ext}` : creator.path });
+  }
+
+  async function saveCreator() {
+    if (!creator) return;
+    setSavingCreator(true);
+    try {
+      await authApi.post(`/bots/${id}/file`, { path: creator.path, content: creator.content });
+      setLogs((prev) => [...prev, `✅ ${creator.type === 'comando' ? 'Comando' : 'Nano'} criado: ${creator.path}. Reinicia o bot para carregar.`]);
+      setCreator(null);
+      loadFiles();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Não foi possível criar');
+    } finally {
+      setSavingCreator(false);
     }
   }
 
@@ -489,6 +548,12 @@ export PAINEL_BOT_ID=${id}`}</pre>
                 {/* @ts-expect-error webkitdirectory is non-standard */}
                 <input type="file" multiple webkitdirectory="" directory="" onChange={uploadMany} className="hidden" />
               </label>
+              <button onClick={() => openCreator('comando')} className="btn-ghost !px-2.5 !py-1 text-xs" title="Criar comando">
+                <i className="fa-solid fa-terminal" /> Comando
+              </button>
+              <button onClick={() => openCreator('nano')} className="btn-ghost !px-2.5 !py-1 text-xs" title="Criar nano">
+                <i className="fa-solid fa-cube" /> Nano
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto p-2 text-sm">
               {busy === 'upload' && <p className="px-2 py-3 text-xs text-teal">A carregar…</p>}
@@ -652,6 +717,40 @@ export PAINEL_BOT_ID=${id}`}</pre>
           )}
         </div>
         </>
+      )}
+
+      {/* Command / Nano creator */}
+      {creator && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setCreator(null)}>
+          <div className="card flex max-h-[85vh] w-full max-w-2xl flex-col p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-lg font-bold">
+                <i className={`fa-solid ${creator.type === 'comando' ? 'fa-terminal' : 'fa-cube'} mr-2 text-teal`} />
+                Criar {creator.type === 'comando' ? 'comando' : 'nano'}
+              </h2>
+              <button onClick={() => setCreator(null)} className="text-muted hover:text-ink"><i className="fa-solid fa-xmark" /></button>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="text-sm">
+                <span className="mb-1 block text-muted">Nome</span>
+                <input value={creator.name} onChange={(e) => updateCreatorName(e.target.value)} placeholder="ex: saldo" className="field text-sm" />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-muted">Caminho do ficheiro</span>
+                <input value={creator.path} onChange={(e) => setCreator({ ...creator, path: e.target.value })} className="field font-mono text-xs" />
+              </label>
+            </div>
+            <label className="mt-3 flex-1 text-sm">
+              <span className="mb-1 block text-muted">Conteúdo</span>
+              <textarea value={creator.content} onChange={(e) => setCreator({ ...creator, content: e.target.value })} spellCheck={false} className="field min-h-[280px] w-full font-mono text-xs" />
+            </label>
+            <p className="mt-2 text-xs text-muted">Ajusta o caminho à estrutura do teu bot. Reinicia o bot depois de criar para carregar.</p>
+            <div className="mt-4 flex justify-end gap-3">
+              <button onClick={() => setCreator(null)} className="btn-ghost">Cancelar</button>
+              <button onClick={saveCreator} disabled={savingCreator || !creator.path} className="btn-primary">{savingCreator ? 'A criar…' : 'Criar'}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* File editor */}
