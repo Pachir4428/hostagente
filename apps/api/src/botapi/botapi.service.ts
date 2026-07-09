@@ -79,6 +79,7 @@ export class BotApiService {
     else if (Array.isArray(rawBody?.data)) groups = rawBody.data;
 
     const norm = (g: any) => ({
+      id: g.id || g.jid || g.groupId || g.gid,
       name: g.name || g.subject || g.title || 'Grupo',
       description: g.description || g.desc || '',
       admins: g.admins || g.administrators || [],

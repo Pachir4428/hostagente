@@ -22,6 +22,7 @@ interface FileNode {
   size: number;
 }
 interface Group {
+  id?: string;
   name: string;
   description?: string;
   admins?: string[];
@@ -29,6 +30,8 @@ interface Group {
   participants?: number;
   plan?: string;
   active?: boolean;
+  validUntil?: string;
+  manual?: boolean;
 }
 
 const STATUS: Record<string, { label: string; chip: string; dot: string }> = {
@@ -88,6 +91,8 @@ export default function BotConsolePage() {
   const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
   const [creator, setCreator] = useState<{ type: 'comando' | 'nano'; name: string; path: string; content: string } | null>(null);
   const [savingCreator, setSavingCreator] = useState(false);
+  const [groupForm, setGroupForm] = useState<{ id: string; name: string; plan: string; validUntil: string } | null>(null);
+  const [savingGroup, setSavingGroup] = useState(false);
   const logsRef = useRef<HTMLDivElement>(null);
   const autoScroll = useRef(true);
   const cmdHistory = useRef<string[]>([]);
@@ -390,6 +395,30 @@ module.exports = {
     }
   }
 
+  async function saveGroup() {
+    if (!groupForm?.id.trim()) return;
+    setSavingGroup(true);
+    try {
+      await authApi.post(`/bots/${id}/groups`, {
+        id: groupForm.id.trim(),
+        name: groupForm.name.trim() || undefined,
+        plan: groupForm.plan.trim() || undefined,
+        validUntil: groupForm.validUntil || undefined,
+      });
+      setGroupForm(null);
+      await loadLive();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Não foi possível adicionar');
+    } finally {
+      setSavingGroup(false);
+    }
+  }
+  async function removeGroup(gid?: string) {
+    if (!gid || !confirm('Remover este grupo do painel?')) return;
+    await authApi.delete(`/bots/${id}/groups/${encodeURIComponent(gid)}`);
+    await loadLive();
+  }
+
   async function remove() {
     if (!confirm('Eliminar este bot?')) return;
     await authApi.delete(`/bots/${id}`);
@@ -671,22 +700,56 @@ export PAINEL_BOT_ID=${id}`}</pre>
 
         {/* WhatsApp groups */}
         <div className="mt-6">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-display text-lg font-bold"><i className="fa-brands fa-whatsapp mr-2 text-teal" />Grupos do WhatsApp</h3>
-            {groups.length > 0 && (
-              <div className="flex gap-2 text-xs">
-                <span className="chip border border-line bg-hover text-muted">{groups.length} grupo(s)</span>
-                <span className="chip border border-line bg-hover text-muted">
-                  {groups.reduce((n, g) => n + (g.services?.length || 0), 0)} serviço(s) ativo(s)
-                </span>
-                {groups.some((g) => g.active !== undefined) && (
-                  <span className="chip border border-teal/25 bg-teal/10 text-teal">
-                    {groups.filter((g) => g.active).length} assinatura(s) ativa(s)
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {groups.length > 0 && (
+                <>
+                  <span className="chip border border-line bg-hover text-muted">{groups.length} grupo(s)</span>
+                  <span className="chip border border-line bg-hover text-muted">
+                    {groups.reduce((n, g) => n + (g.services?.length || 0), 0)} serviço(s)
                   </span>
-                )}
-              </div>
-            )}
+                  {groups.some((g) => g.active !== undefined) && (
+                    <span className="chip border border-teal/25 bg-teal/10 text-teal">
+                      {groups.filter((g) => g.active).length} assinatura(s) ativa(s)
+                    </span>
+                  )}
+                </>
+              )}
+              <button onClick={() => setGroupForm({ id: '', name: '', plan: '', validUntil: '' })} className="btn-primary !px-3 !py-1 text-xs">
+                <i className="fa-solid fa-plus" /> Adicionar grupo
+              </button>
+            </div>
           </div>
+
+          {/* Add-group form */}
+          {groupForm && (
+            <div className="card mb-4 p-4">
+              <p className="mb-3 text-sm text-muted">Regista um grupo pelo <b>ID</b> (o bot completa nome, admins e serviços quando ligar). Define o plano e a validade da subscrição.</p>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <label className="text-sm sm:col-span-2">
+                  <span className="mb-1 block text-muted">ID do grupo *</span>
+                  <input value={groupForm.id} onChange={(e) => setGroupForm({ ...groupForm, id: e.target.value })} placeholder="120363428003039805" className="field font-mono text-xs" />
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block text-muted">Nome (opcional)</span>
+                  <input value={groupForm.name} onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })} placeholder="TESTE confidencial" className="field text-sm" />
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block text-muted">Plano</span>
+                  <input value={groupForm.plan} onChange={(e) => setGroupForm({ ...groupForm, plan: e.target.value })} placeholder="PRO" className="field text-sm" />
+                </label>
+              </div>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="text-sm">
+                  <span className="mb-1 block text-muted">Validade da subscrição</span>
+                  <input type="date" value={groupForm.validUntil} onChange={(e) => setGroupForm({ ...groupForm, validUntil: e.target.value })} className="field text-sm" />
+                </label>
+                <button onClick={saveGroup} disabled={savingGroup || !groupForm.id.trim()} className="btn-primary">{savingGroup ? 'A guardar…' : 'Guardar grupo'}</button>
+                <button onClick={() => setGroupForm(null)} className="btn-ghost">Cancelar</button>
+              </div>
+            </div>
+          )}
           {groups.length === 0 ? (
             <div className="card p-6 text-center">
               <i className="fa-solid fa-people-group text-2xl text-muted2" />
@@ -695,24 +758,35 @@ export PAINEL_BOT_ID=${id}`}</pre>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {groups.map((g, i) => (
-                <div key={i} className={`card flex flex-col p-5 transition hover:border-teal/30 ${g.active === false ? 'opacity-60' : ''}`}>
+                <div key={g.id || i} className={`group card flex flex-col p-5 transition hover:border-teal/30 ${g.active === false ? 'opacity-60' : ''}`}>
                   <div className="flex items-start gap-3">
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-teal/10 text-teal"><i className="fa-solid fa-users" /></span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-display font-semibold" title={g.name}>{g.name}</p>
+                      {g.id && <p className="truncate font-mono text-[10px] text-muted2" title={g.id}>{g.id}</p>}
                       {typeof g.participants === 'number' && (
                         <p className="text-xs text-muted">{g.participants} participantes</p>
                       )}
                     </div>
-                    {g.active !== undefined && (
-                      <span className={`chip ${g.active ? 'bg-teal/10 text-teal border border-teal/25' : 'bg-danger/10 text-danger border border-danger/25'}`}>
-                        {g.active ? 'Ativa' : 'Inativa'}
-                      </span>
-                    )}
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      {g.active !== undefined && (
+                        <span className={`chip ${g.active ? 'bg-teal/10 text-teal border border-teal/25' : 'bg-danger/10 text-danger border border-danger/25'}`}>
+                          {g.active ? 'Ativa' : 'Inativa'}
+                        </span>
+                      )}
+                      {g.manual && (
+                        <button onClick={() => removeGroup(g.id)} className="text-xs text-muted opacity-0 transition hover:text-danger group-hover:opacity-100" title="Remover"><i className="fa-solid fa-xmark" /></button>
+                      )}
+                    </div>
                   </div>
-                  {g.plan && (
-                    <div className="mt-3">
-                      <span className="chip border border-gold/25 bg-gold/10 text-gold"><i className="fa-solid fa-star mr-1" />Plano {g.plan}</span>
+                  {(g.plan || g.validUntil) && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {g.plan && <span className="chip border border-gold/25 bg-gold/10 text-gold"><i className="fa-solid fa-star mr-1" />Plano {g.plan}</span>}
+                      {g.validUntil && (
+                        <span className={`chip border ${g.active === false ? 'border-danger/25 bg-danger/10 text-danger' : 'border-line bg-hover text-muted'}`}>
+                          <i className="fa-regular fa-calendar mr-1" />até {new Date(g.validUntil).toLocaleDateString('pt-PT')}
+                        </span>
+                      )}
                     </div>
                   )}
                   {g.description && <p className="mt-3 line-clamp-3 text-sm text-muted">{g.description}</p>}

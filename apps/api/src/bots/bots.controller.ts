@@ -156,6 +156,21 @@ export class BotsController {
     return this.service.sendCommand(user.tenantId!, id, body.command ?? '');
   }
 
+  // ── Manual group registration ──
+  @Post(':id/groups')
+  addGroup(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: { id: string; name?: string; description?: string; plan?: string; validUntil?: string; admins?: string[]; services?: string[] },
+  ) {
+    return this.service.addGroup(user.tenantId!, id, body);
+  }
+
+  @Delete(':id/groups/:groupId')
+  removeGroup(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('groupId') groupId: string) {
+    return this.service.removeGroup(user.tenantId!, id, groupId);
+  }
+
   @Post(':id/stdin')
   stdin(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { input: string }) {
     return this.service.sendStdin(user.tenantId!, id, body.input ?? '');

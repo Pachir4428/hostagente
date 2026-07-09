@@ -146,7 +146,7 @@ export class BotsService {
 
   /** Live console data (status/qr/pairing/logs) from Redis. */
   async live(tenantId: string, id: string) {
-    await this.get(tenantId, id);
+    const bot = await this.get(tenantId, id);
     try {
       const [status, qr, pairing, logs, statsRaw, groupsRaw] = await Promise.all([
         this.redis.get(`bot:${id}:status`),
@@ -168,16 +168,94 @@ export class BotsService {
       } catch {
         stats = null;
       }
-      let groups: any[] = [];
+      let reported: any[] = [];
       try {
-        groups = groupsRaw ? JSON.parse(groupsRaw) : [];
+        reported = groupsRaw ? JSON.parse(groupsRaw) : [];
       } catch {
-        groups = [];
+        reported = [];
       }
+      const groups = this.mergeGroups(bot, reported);
       return { status: status || 'stopped', qr, pairing, logs: logs || [], stats, groups };
     } catch {
-      return { status: 'stopped', qr: null, pairing: null, logs: [], stats: null, groups: [], redisError: true };
+      // Even if Redis is down, still show manually-registered groups.
+      return { status: 'stopped', qr: null, pairing: null, logs: [], stats: null, groups: this.mergeGroups(bot, []), redisError: true };
     }
+  }
+
+  /**
+   * Merge manually-registered groups (stored in bot.config.manualGroups) with
+   * whatever the bot reported (matched by WhatsApp group id). Computes each
+   * group's subscription "active" state from its validUntil date.
+   */
+  private mergeGroups(bot: any, reported: any[]): any[] {
+    const manual: any[] = Array.isArray(bot?.config?.manualGroups) ? bot.config.manualGroups : [];
+    // Group JIDs come as "12036...@g.us" but users enter just the number.
+    const nid = (x: any) => String(x || '').split('@')[0].trim();
+    const byId = new Map<string, any>();
+    for (const r of reported || []) {
+      if (r?.id) byId.set(nid(r.id), r);
+    }
+    const now = Date.now();
+    const computeActive = (validUntil?: string, fallback?: boolean) => {
+      if (validUntil) return new Date(validUntil).getTime() >= now;
+      return fallback;
+    };
+    const out: any[] = manual.map((m) => {
+      const rep = m.id ? byId.get(nid(m.id)) || {} : {};
+      return {
+        id: m.id,
+        name: rep.name || m.name || m.id || 'Grupo',
+        description: rep.description || m.description || '',
+        admins: (rep.admins && rep.admins.length ? rep.admins : m.admins) || [],
+        services: (rep.services && rep.services.length ? rep.services : m.services) || [],
+        participants: rep.participants ?? m.participants,
+        plan: m.plan || rep.plan,
+        validUntil: m.validUntil,
+        active: computeActive(m.validUntil, rep.active ?? m.active),
+        manual: true,
+      };
+    });
+    // Add reported groups that weren't registered manually.
+    for (const r of reported || []) {
+      if (!manual.some((m) => nid(m.id) === nid(r.id))) out.push(r);
+    }
+    return out;
+  }
+
+  /** Register or update a group manually (by WhatsApp id) with plan/validity. */
+  async addGroup(
+    tenantId: string,
+    id: string,
+    data: { id: string; name?: string; description?: string; plan?: string; validUntil?: string; admins?: string[]; services?: string[] },
+  ) {
+    const bot = await this.get(tenantId, id);
+    if (!data?.id) throw new BadRequestException('Indica o ID do grupo');
+    const cfg: any = (bot.config as any) || {};
+    const list: any[] = Array.isArray(cfg.manualGroups) ? cfg.manualGroups : [];
+    const gid = String(data.id).trim();
+    const entry = {
+      id: gid,
+      name: data.name || '',
+      description: data.description || '',
+      plan: data.plan || '',
+      validUntil: data.validUntil || '',
+      admins: Array.isArray(data.admins) ? data.admins : [],
+      services: Array.isArray(data.services) ? data.services : [],
+    };
+    const idx = list.findIndex((g) => String(g.id) === gid);
+    if (idx >= 0) list[idx] = { ...list[idx], ...entry };
+    else list.push(entry);
+    cfg.manualGroups = list;
+    await this.prisma.bot.update({ where: { id }, data: { config: cfg } });
+    return { success: true };
+  }
+
+  async removeGroup(tenantId: string, id: string, groupId: string) {
+    const bot = await this.get(tenantId, id);
+    const cfg: any = (bot.config as any) || {};
+    cfg.manualGroups = (Array.isArray(cfg.manualGroups) ? cfg.manualGroups : []).filter((g: any) => String(g.id) !== String(groupId));
+    await this.prisma.bot.update({ where: { id }, data: { config: cfg } });
+    return { success: true };
   }
 
   /** Stream the bot's project folder as a .zip download (excludes node_modules/.git). */
