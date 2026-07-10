@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   title: 'HostAgente — Vende dados no automático',
   description:
     'Deteta pagamentos M-Pesa/e-Mola com o MacroDroid e entrega pacotes de dados automaticamente. Feito para revendedores em Moçambique.',
+  manifest: '/manifest.json',
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'HostAgente' },
+};
+
+export const viewport = {
+  themeColor: '#0a0711',
 };
 
 // Runs before paint to apply the saved theme (avoids a flash of the wrong theme).
@@ -18,6 +24,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt" data-theme="dark">
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <link rel="apple-touch-icon" href="/icon.svg" />
+        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

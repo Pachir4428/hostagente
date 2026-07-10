@@ -1,4 +1,4 @@
-.PHONY: help build deploy logs health ps stop restart migrate seed clean dev \
+.PHONY: help build deploy logs health ps stop restart migrate seed clean dev backup restore \
 	build-no-cache deploy-no-cache supabase-migrate supabase-up supabase-down \
 	supabase-logs supabase-health
 
@@ -98,6 +98,13 @@ ps: ## Estado dos serviços
 
 health: ## Verificar saúde da API
 	@docker compose -f docker-compose.prod.yml exec -T api curl -sf http://localhost:3000/health || echo "API não disponível"
+
+## ── Backups ──────────────────────────────────────────────────
+backup: ## Criar backup da base de dados (backups/*.sql.gz)
+	bash scripts/backup-db.sh
+
+restore: ## Restaurar backup: make restore FILE=backups/hostagente-....sql.gz
+	bash scripts/restore-db.sh $(FILE)
 
 ## ── Limpeza ──────────────────────────────────────────────────
 clean: ## Remover imagens e volumes não usados

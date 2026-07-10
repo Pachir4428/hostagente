@@ -1,0 +1,14 @@
+{
+  "name": "HostAgente",
+  "short_name": "HostAgente",
+  "description": "Vende dados no automático — deteção de pagamentos e bots de WhatsApp.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0711",
+  "theme_color": "#0a0711",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
