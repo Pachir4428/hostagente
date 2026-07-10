@@ -5,6 +5,66 @@ import { PrismaService } from '../prisma/prisma.service';
 export class DashboardService {
   constructor(private prisma: PrismaService) {}
 
+  /** Sales insights: top packages, peak hours/days, recurring customers. */
+  async insights(tenantId: string) {
+    const since = new Date();
+    since.setDate(since.getDate() - 90);
+    const txs = await this.prisma.transaction.findMany({
+      where: { tenantId, createdAt: { gte: since } },
+      select: { amount: true, phoneNumber: true, createdAt: true, status: true, product: { select: { description: true } } },
+      take: 5000,
+      orderBy: { createdAt: 'desc' },
+    });
+    const paid = txs.filter((t) => ['completed', 'success', 'delivered', 'paid'].includes(String(t.status)));
+    const base = paid.length ? paid : txs; // fall back to all if statuses differ
+
+    // Top packages by count + revenue.
+    const pkg = new Map<string, { count: number; revenue: number }>();
+    for (const t of base) {
+      const key = t.product?.description || `${t.amount} MZN`;
+      const cur = pkg.get(key) || { count: 0, revenue: 0 };
+      cur.count += 1;
+      cur.revenue += t.amount;
+      pkg.set(key, cur);
+    }
+    const topPackages = [...pkg.entries()]
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    // Peak hours (0-23) and weekdays (0=Dom).
+    const byHour = Array.from({ length: 24 }, () => 0);
+    const byDay = Array.from({ length: 7 }, () => 0);
+    const customers = new Map<string, { count: number; revenue: number }>();
+    let revenue = 0;
+    for (const t of base) {
+      const d = new Date(t.createdAt);
+      byHour[d.getHours()] += 1;
+      byDay[d.getDay()] += 1;
+      revenue += t.amount;
+      const c = customers.get(t.phoneNumber) || { count: 0, revenue: 0 };
+      c.count += 1;
+      c.revenue += t.amount;
+      customers.set(t.phoneNumber, c);
+    }
+    const topCustomers = [...customers.entries()]
+      .map(([phone, v]) => ({ phone, ...v }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    return {
+      totalSales: base.length,
+      revenue,
+      avgTicket: base.length ? Math.round(revenue / base.length) : 0,
+      uniqueCustomers: customers.size,
+      recurringCustomers: topCustomers.filter((c) => c.count > 1).length,
+      topPackages,
+      byHour,
+      byDay,
+      topCustomers,
+    };
+  }
+
   async summary(tenantId: string) {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());

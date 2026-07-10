@@ -15,4 +15,9 @@ export class DashboardController {
   summary(@CurrentUser() user: AuthUser) {
     return this.service.summary(user.tenantId!);
   }
+
+  @Get('insights')
+  insights(@CurrentUser() user: AuthUser) {
+    return this.service.insights(user.tenantId!);
+  }
 }
