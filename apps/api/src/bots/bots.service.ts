@@ -4,6 +4,8 @@ import * as path from 'path';
 import axios from 'axios';
 import Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
 
 const RUNNER_URL = process.env.RUNNER_INTERNAL_URL || 'http://bot-runner:4001';
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || '';
@@ -17,7 +19,11 @@ export class BotsService {
   private readonly logger = new Logger(BotsService.name);
   private redis = new Redis(REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 2 });
 
-  constructor(private prisma: PrismaService) {
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+    private mail: MailService,
+  ) {
     this.redis.on('error', () => {}); // don't crash on redis blips
   }
 
@@ -47,7 +53,20 @@ export class BotsService {
     return bot;
   }
 
-  create(tenantId: string, data: { name: string; type?: 'auto' | 'manual'; phoneNumber?: string }) {
+  async create(tenantId: string, data: { name: string; type?: 'auto' | 'manual'; phoneNumber?: string }) {
+    // Enforce the plan's bot limit.
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: { subscription: { include: { plan: true } }, plan: true },
+    });
+    const plan = tenant?.subscription?.plan ?? tenant?.plan ?? null;
+    const maxBots = plan?.maxBots ?? 1;
+    const count = await this.prisma.bot.count({ where: { tenantId } });
+    if (count >= maxBots) {
+      throw new BadRequestException(
+        `O teu plano${plan ? ` (${plan.name})` : ''} permite ${maxBots} bot(s). Faz upgrade em Assinatura para adicionar mais.`,
+      );
+    }
     return this.prisma.bot.create({
       data: {
         tenantId,
@@ -173,6 +192,12 @@ export class BotsService {
         reported = groupsRaw ? JSON.parse(groupsRaw) : [];
       } catch {
         reported = [];
+      }
+      // Alert (once) when a manual bot has crashed and exhausted auto-restarts.
+      if (status === 'error' && stats && stats.restarts >= 3) {
+        await this.alertBotDown(bot).catch(() => null);
+      } else if (status === 'connected') {
+        await this.redis.del(`bot:${id}:alerted`).catch(() => null);
       }
       const groups = this.mergeGroups(bot, reported);
       return { status: status || 'stopped', qr, pairing, logs: logs || [], stats, groups };
@@ -301,6 +326,21 @@ export class BotsService {
     cfg.manualGroups = list;
     await this.prisma.bot.update({ where: { id }, data: { config: cfg } });
     return { success: true };
+  }
+
+  /** Notify the tenant (panel + email) that a bot is down — deduped in Redis. */
+  private async alertBotDown(bot: any) {
+    const flag = `bot:${bot.id}:alerted`;
+    const already = await this.redis.get(flag).catch(() => null);
+    if (already) return;
+    await this.redis.set(flag, '1', 'EX', 60 * 60 * 6).catch(() => null); // re-alert at most every 6h
+    await this.notifications
+      .create(bot.tenantId, 'error', 'Bot em baixo', `O bot "${bot.name}" caiu e não reiniciou automaticamente. Verifica os logs.`)
+      .catch(() => null);
+    const to = await this.mail.tenantAdminEmail(bot.tenantId).catch(() => undefined);
+    await this.mail
+      .send(to, `⚠️ Bot em baixo: ${bot.name}`, `<p>O bot <b>${bot.name}</b> caiu e esgotou os reinícios automáticos.</p><p>Entra no painel para ver os logs e reiniciar.</p>`)
+      .catch(() => null);
   }
 
   /** Ask the running bot to scan its WhatsApp groups now and report back. */

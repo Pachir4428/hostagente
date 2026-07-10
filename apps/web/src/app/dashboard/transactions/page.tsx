@@ -52,9 +52,19 @@ export default function TransactionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  function exportCsv() {
+  async function exportCsv() {
+    // Fetch ALL rows matching the current filters (not just the current page).
+    let all: Tx[] = items;
+    try {
+      const res = await authApi.get('/transactions', {
+        params: { page: 1, pageSize: 10000, phone, status, from, to },
+      });
+      all = res.data.items || items;
+    } catch {
+      /* fall back to current page */
+    }
     const header = ['Data', 'Numero', 'Valor', 'Operadora', 'Estado', 'Pacote'];
-    const rows = items.map((t) => [
+    const rows = all.map((t) => [
       dateTime(t.createdAt),
       t.phoneNumber,
       t.amount,
