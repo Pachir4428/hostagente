@@ -21,16 +21,28 @@ const {
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const PROCESSED_PATH = path.join(__dirname, 'processed.json');
-const API_KEY = process.env.API_KEY || '';
+// Chave do tenant. Em modo standalone usa API_KEY do .env; se correr como bot
+// manual DENTRO da plataforma, usa a chave injetada automaticamente
+// (PAINEL_API_KEY / HOSTAGENTE_KEY). Assim é multi-tenant sem configuração.
+const API_KEY = process.env.API_KEY || process.env.PAINEL_API_KEY || process.env.HOSTAGENTE_KEY || '';
+// URL do painel (injetado quando corre como bot manual).
+const PANEL_URL = process.env.PAINEL_API_URL || process.env.HOSTAGENTE_URL || '';
 
 // ── Config (recarregada a cada mensagem, para editar preços sem reiniciar) ──
 function loadConfig() {
+  let cfg;
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
   } catch (e) {
     console.error('Erro a ler config.json:', e.message);
-    return { pricing: {}, bufferMs: 8000, ownAccountNumbers: [], endpoint: '' };
+    cfg = { pricing: {}, bufferMs: 8000, ownAccountNumbers: [] };
   }
+  // Se correr como bot manual na plataforma e o endpoint não estiver definido,
+  // usa o URL interno injetado (http://api:3000) + o caminho do ingest.
+  if (!cfg.endpoint && PANEL_URL) {
+    cfg.endpoint = PANEL_URL.replace(/\/$/, '') + '/ingest/macrodroid';
+  }
+  return cfg;
 }
 
 // ── Registo de referências já processadas (evita duplicados) ──
