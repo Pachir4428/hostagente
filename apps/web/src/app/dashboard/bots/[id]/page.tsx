@@ -75,6 +75,9 @@ export default function BotConsolePage() {
   const [cmd, setCmd] = useState('');
   const [files, setFiles] = useState<FileNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [uploadDir, setUploadDir] = useState(''); // pasta destino dos uploads ('' = raiz)
+  const replaceRef = useRef<HTMLInputElement>(null);
+  const replaceTarget = useRef<string>('');
   const [editing, setEditing] = useState<{ path: string; content: string } | null>(null);
   const [savingFile, setSavingFile] = useState(false);
   const [startCmd, setStartCmd] = useState('');
@@ -246,18 +249,43 @@ export default function BotConsolePage() {
     if (!list || list.length === 0) return;
     setBusy('upload');
     try {
+      const prefix = uploadDir ? uploadDir.replace(/\/$/, '') + '/' : '';
       const fd = new FormData();
       for (const f of Array.from(list)) {
-        const rel = (f as any).webkitRelativePath || f.name;
-        fd.append(rel, f, f.name);
+        const base = (f as any).webkitRelativePath || f.name;
+        fd.append(prefix + base, f, f.name);
       }
       const res = await authApi.post(`/bots/${id}/files`, fd);
-      setLogs((prev) => [...prev, `✅ ${res.data?.count ?? 0} ficheiro(s) carregado(s).`]);
-      alert(`${res.data?.count ?? 0} ficheiro(s) carregado(s).`);
+      setLogs((prev) => [...prev, `✅ ${res.data?.count ?? 0} ficheiro(s) carregado(s) em ${uploadDir || 'raiz'}.`]);
+      if (uploadDir) setExpanded((prev) => new Set(prev).add(uploadDir));
       await loadBot();
       loadFiles();
     } catch (e: any) {
       alert(e.response?.data?.message || 'Falha no upload');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  // Substituir um ficheiro específico: carrega uma nova versão no MESMO caminho.
+  function startReplace(path: string) {
+    replaceTarget.current = path;
+    replaceRef.current?.click();
+  }
+  async function onReplacePicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    const target = replaceTarget.current;
+    if (!file || !target) return;
+    setBusy('upload');
+    try {
+      const fd = new FormData();
+      fd.append(target, file, file.name); // rel = caminho existente -> sobrescreve
+      await authApi.post(`/bots/${id}/files`, fd);
+      setLogs((prev) => [...prev, `✅ Ficheiro substituído: ${target}. Reinicia o bot para aplicar.`]);
+      loadFiles();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Falha ao substituir');
     } finally {
       setBusy('');
     }
@@ -612,6 +640,21 @@ export PAINEL_BOT_ID=${id}`}</pre>
                 <i className="fa-solid fa-cube" /> Nano
               </button>
             </div>
+            {/* Destino dos uploads — evita ficheiros órfãos na raiz */}
+            <div className="flex items-center gap-2 border-b border-line px-2 py-1.5">
+              <span className="text-[11px] text-muted"><i className="fa-solid fa-folder-plus mr-1" />Carregar para:</span>
+              <select
+                value={uploadDir}
+                onChange={(e) => setUploadDir(e.target.value)}
+                className="min-w-0 flex-1 rounded border border-line bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-ink focus:outline-none"
+              >
+                <option value="">raiz (/)</option>
+                {files.filter((f) => f.type === 'dir').map((f) => (
+                  <option key={f.path} value={f.path}>{f.path}/</option>
+                ))}
+              </select>
+            </div>
+            <input ref={replaceRef} type="file" onChange={onReplacePicked} className="hidden" />
             <div className="flex-1 overflow-y-auto p-2 text-sm">
               {busy === 'upload' && <p className="px-2 py-3 text-xs text-teal">A carregar…</p>}
               {files.length === 0 ? (
@@ -637,6 +680,11 @@ export PAINEL_BOT_ID=${id}`}</pre>
                           <i className="fa-solid fa-file w-4 text-xs text-muted" />
                           <span className="truncate text-xs text-ink hover:text-teal">{name}</span>
                         </button>
+                      )}
+                      {isDir ? (
+                        <button onClick={() => setUploadDir(f.path)} className={`text-xs opacity-0 transition group-hover:opacity-100 ${uploadDir === f.path ? '!opacity-100 text-teal' : 'text-muted hover:text-teal'}`} title="Carregar para esta pasta"><i className="fa-solid fa-folder-plus" /></button>
+                      ) : (
+                        <button onClick={() => startReplace(f.path)} className="text-xs text-muted opacity-0 transition hover:text-teal group-hover:opacity-100" title="Substituir por nova versão"><i className="fa-solid fa-arrow-up-from-bracket" /></button>
                       )}
                       <button onClick={() => deleteFile(f.path)} className="text-xs text-muted opacity-0 transition hover:text-danger group-hover:opacity-100" title="Apagar"><i className="fa-solid fa-xmark" /></button>
                     </div>
