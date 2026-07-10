@@ -110,6 +110,31 @@ export class BotApiService {
     return { success: true, count: clean.length, received: groups.length };
   }
 
+  /**
+   * The bot renews a group's subscription after detecting a payment (M-Pesa/
+   * e-Mola) in that group — extends validUntil by N months automatically.
+   */
+  async renewGroup(apiKey: string | undefined, botId: string, groupId: string, months: number) {
+    const tenantId = await this.tenantFromKey(apiKey);
+    const bot = await this.prisma.bot.findFirst({ where: { id: botId, tenantId } });
+    if (!bot) throw new UnauthorizedException('Bot não pertence a este tenant');
+    const cfg: any = (bot.config as any) || {};
+    const list: any[] = Array.isArray(cfg.manualGroups) ? cfg.manualGroups : [];
+    const nid = (x: any) => String(x || '').split('@')[0].trim();
+    let g = list.find((x) => nid(x.id) === nid(groupId));
+    if (!g) {
+      // Auto-register the group if unknown, so payment renewal always works.
+      g = { id: nid(groupId), name: '', plan: '', validUntil: '', admins: [], services: [] };
+      list.push(g);
+    }
+    const base = g.validUntil && new Date(g.validUntil).getTime() > Date.now() ? new Date(g.validUntil) : new Date();
+    base.setMonth(base.getMonth() + (months || 1));
+    g.validUntil = base.toISOString().slice(0, 10);
+    cfg.manualGroups = list;
+    await this.prisma.bot.update({ where: { id: botId }, data: { config: cfg } });
+    return { success: true, groupId: g.id, validUntil: g.validUntil };
+  }
+
   async remove(apiKey: string | undefined, body: { id?: string; amount?: number; operator?: 'mpesa' | 'emola' | 'mkesh' | null }) {
     const tenantId = await this.tenantFromKey(apiKey);
     let id = body.id;

@@ -31,6 +31,17 @@ export class BotApiController {
     return this.service.reportGroups(apiKey, id, body);
   }
 
+  // The bot renews a group's subscription after detecting a payment in it.
+  @Post('bots/:id/groups/:groupId/renew')
+  renewGroup(
+    @Headers('x-api-key') apiKey: string,
+    @Param('id') id: string,
+    @Param('groupId') groupId: string,
+    @Body() body: { months?: number },
+  ) {
+    return this.service.renewGroup(apiKey, id, groupId, body?.months ?? 1);
+  }
+
   @Delete('products')
   remove(
     @Headers('x-api-key') apiKey: string,
