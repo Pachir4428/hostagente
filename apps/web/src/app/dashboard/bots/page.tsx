@@ -63,19 +63,21 @@ export default function BotsPage() {
     }
   }
 
-  async function downloadTemplate() {
+  async function downloadZip(url: string, filename: string) {
     try {
-      const res = await authApi.get('/bots/template/download', { responseType: 'blob' });
-      const url = URL.createObjectURL(res.data);
+      const res = await authApi.get(url, { responseType: 'blob' });
+      const objUrl = URL.createObjectURL(res.data);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = 'bot-modelo-hostagente.zip';
+      a.href = objUrl;
+      a.download = filename;
       a.click();
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(objUrl);
     } catch {
-      alert('Não foi possível descarregar o modelo.');
+      alert('Não foi possível descarregar.');
     }
   }
+  const downloadTemplate = () => downloadZip('/bots/template/download', 'bot-modelo-hostagente.zip');
+  const downloadBridge = () => downloadZip('/bots/bridge/download', 'ponte-pagamentos.zip');
 
   return (
     <AppShell nav={TENANT_NAV} title="Bots" email={user?.email}>
@@ -83,8 +85,11 @@ export default function BotsPage() {
         <p className="text-sm text-muted">
           Bots manuais (Baileys) correm na plataforma e ligam ao WhatsApp por QR ou código.
         </p>
-        <div className="flex gap-2">
-          <button onClick={downloadTemplate} className="btn-ghost" title="Descarregar um bot Baileys pronto que já reporta grupos">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={downloadBridge} className="btn-ghost" title="Ponte que lê comprovantes M-Pesa/eMola no WhatsApp — sem configurar chave">
+            <i className="fa-solid fa-money-bill-transfer" /> Ponte de pagamentos
+          </button>
+          <button onClick={downloadTemplate} className="btn-ghost" title="Bot Baileys pronto que já reporta grupos">
             <i className="fa-solid fa-download" /> Bot-modelo
           </button>
           <button onClick={() => setShowModal(true)} className="btn-primary">

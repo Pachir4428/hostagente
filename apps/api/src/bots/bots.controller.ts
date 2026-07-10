@@ -51,6 +51,11 @@ export class BotsController {
     return this.service.downloadTemplate(res);
   }
 
+  @Get('bridge/download')
+  downloadBridge(@Res() res: Response) {
+    return this.service.downloadBridge(res);
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.service.get(user.tenantId!, id);

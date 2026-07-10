@@ -550,10 +550,21 @@ Adiciona os teus comandos em \`src/comandos/\`.
   }
 
   async downloadTemplate(res: any) {
+    await this.zipFiles(res, 'bot-modelo-hostagente.zip', this.templateFiles());
+  }
+
+  /** Ready-to-run payment bridge (WhatsApp -> /ingest/macrodroid). */
+  async downloadBridge(res: any) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { bridgeTemplateFiles } = require('./bridge-template');
+    await this.zipFiles(res, 'ponte-pagamentos.zip', bridgeTemplateFiles());
+  }
+
+  private async zipFiles(res: any, filename: string, files: { name: string; content: string }[]) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const archiver = require('archiver');
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', 'attachment; filename="bot-modelo-hostagente.zip"');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     const archive = archiver('zip', { zlib: { level: 9 } });
     archive.on('error', () => {
       try {
@@ -563,7 +574,7 @@ Adiciona os teus comandos em \`src/comandos/\`.
       }
     });
     archive.pipe(res);
-    for (const f of this.templateFiles()) archive.append(f.content, { name: f.name });
+    for (const f of files) archive.append(f.content, { name: f.name });
     await archive.finalize();
   }
 
