@@ -150,8 +150,8 @@ export default function AdminPlansPage() {
               <h2 className="font-display text-lg font-semibold">Cupões</h2>
               <button onClick={() => setCouponModal(true)} className="btn-primary">+ Novo cupão</button>
             </div>
-            <div className="card overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="card overflow-x-auto">
+              <table className="w-full min-w-[560px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-muted">
                     <th className="px-4 py-3 font-medium">Código</th>

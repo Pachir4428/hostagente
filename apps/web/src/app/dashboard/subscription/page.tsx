@@ -258,8 +258,8 @@ export default function SubscriptionPage() {
           {/* Invoices */}
           <div>
             <h2 className="mb-4 font-display text-lg font-semibold">Histórico de faturas</h2>
-            <div className="card overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="card overflow-x-auto">
+              <table className="w-full min-w-[520px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-muted">
                     <th className="px-4 py-3 font-medium">Data</th>

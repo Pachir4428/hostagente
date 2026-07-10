@@ -84,7 +84,7 @@ export default function Home() {
         <span className="chip mx-auto border border-line bg-hover text-muted">
           {L.badge || 'Feito para Moçambique · M-Pesa · e-Mola · mKesh'}
         </span>
-        <h1 className="mx-auto mt-6 max-w-4xl font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl">
+        <h1 className="mx-auto mt-6 max-w-4xl font-display text-[2rem] font-bold leading-[1.08] tracking-tight sm:text-5xl md:text-6xl">
           {L.heroTitle || 'Vende dados no'}{' '}
           <span className="bg-gradient-to-r from-teal to-purple bg-clip-text text-transparent">{L.heroHighlight || 'automático'}</span>
           {L.heroTitle ? '' : ', a cada pagamento.'}

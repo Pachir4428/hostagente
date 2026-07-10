@@ -50,7 +50,7 @@ export default function AdminTenantsPage() {
     <AppShell nav={ADMIN_NAV} title="Tenants" email={user?.email} badge="Super Admin">
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-line text-left text-muted">
                 <th className="px-4 py-3 font-medium">Nome</th>
