@@ -161,6 +161,20 @@ export default function SubscriptionPage() {
     setGateways([]);
   }
 
+  async function downloadReceipt(invoiceId: string) {
+    try {
+      const res = await authApi.get(`/subscription/invoices/${invoiceId}/pdf`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `recibo-${invoiceId.slice(0, 8)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Não foi possível gerar o recibo.');
+    }
+  }
+
   const usagePct =
     current?.usage.maxTransactions && current.usage.maxTransactions > 0
       ? Math.min(100, (current.usage.transactions / current.usage.maxTransactions) * 100)
@@ -251,11 +265,12 @@ export default function SubscriptionPage() {
                     <th className="px-4 py-3 font-medium">Data</th>
                     <th className="px-4 py-3 font-medium">Valor</th>
                     <th className="px-4 py-3 font-medium">Estado</th>
+                    <th className="px-4 py-3 font-medium text-right">Recibo</th>
                   </tr>
                 </thead>
                 <tbody>
                   {invoices.length === 0 ? (
-                    <tr><td colSpan={3} className="px-4 py-8 text-center text-muted">Sem faturas.</td></tr>
+                    <tr><td colSpan={4} className="px-4 py-8 text-center text-muted">Sem faturas.</td></tr>
                   ) : (
                     invoices.map((inv) => (
                       <tr key={inv.id} className="border-b border-line/60 last:border-0">
@@ -263,6 +278,11 @@ export default function SubscriptionPage() {
                         <td className="px-4 py-3 font-semibold">{mzn(inv.amount)}</td>
                         <td className="px-4 py-3">
                           <span className={`chip ${STATUS_CHIP[inv.status] ?? STATUS_CHIP.pending}`}>{inv.status}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button onClick={() => downloadReceipt(inv.id)} className="text-teal hover:underline" title="Descarregar recibo PDF">
+                            <i className="fa-solid fa-file-pdf" /> PDF
+                          </button>
                         </td>
                       </tr>
                     ))
