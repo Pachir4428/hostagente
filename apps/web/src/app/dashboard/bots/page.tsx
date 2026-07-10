@@ -63,15 +63,34 @@ export default function BotsPage() {
     }
   }
 
+  async function downloadTemplate() {
+    try {
+      const res = await authApi.get('/bots/template/download', { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'bot-modelo-hostagente.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Não foi possível descarregar o modelo.');
+    }
+  }
+
   return (
     <AppShell nav={TENANT_NAV} title="Bots" email={user?.email}>
       <div className="mb-6 flex items-center justify-between">
         <p className="text-sm text-muted">
           Bots manuais (Baileys) correm na plataforma e ligam ao WhatsApp por QR ou código.
         </p>
-        <button onClick={() => setShowModal(true)} className="btn-primary">
-          <i className="fa-solid fa-plus" /> Novo bot
-        </button>
+        <div className="flex gap-2">
+          <button onClick={downloadTemplate} className="btn-ghost" title="Descarregar um bot Baileys pronto que já reporta grupos">
+            <i className="fa-solid fa-download" /> Bot-modelo
+          </button>
+          <button onClick={() => setShowModal(true)} className="btn-primary">
+            <i className="fa-solid fa-plus" /> Novo bot
+          </button>
+        </div>
       </div>
 
       {loading ? (

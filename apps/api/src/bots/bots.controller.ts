@@ -46,6 +46,11 @@ export class BotsController {
     return this.service.groupSubscriptions(user.tenantId!);
   }
 
+  @Get('template/download')
+  downloadTemplate(@Res() res: Response) {
+    return this.service.downloadTemplate(res);
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.service.get(user.tenantId!, id);

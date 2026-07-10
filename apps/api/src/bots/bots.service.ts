@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import axios from 'axios';
@@ -328,6 +329,54 @@ export class BotsService {
     return { success: true };
   }
 
+  /**
+   * Daily scan of group subscriptions: warn the reseller (panel + email) when a
+   * group is expiring within 3 days or already expired. Deduped per group/day.
+   */
+  @Cron('0 9 * * *')
+  async checkGroupExpiries() {
+    let bots: any[] = [];
+    try {
+      bots = await this.prisma.bot.findMany({ select: { id: true, name: true, tenantId: true, config: true } });
+    } catch {
+      return;
+    }
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    const today = new Date().toISOString().slice(0, 10);
+    const perTenant = new Map<string, string[]>();
+
+    for (const b of bots) {
+      const list: any[] = Array.isArray((b.config as any)?.manualGroups) ? (b.config as any).manualGroups : [];
+      for (const g of list) {
+        if (!g.validUntil) continue;
+        const daysLeft = Math.ceil((new Date(g.validUntil).getTime() - now) / DAY);
+        if (daysLeft > 3) continue; // only warn within 3 days / expired
+        const dedupe = `groupexp:${b.id}:${g.id}:${today}`;
+        const seen = await this.redis.get(dedupe).catch(() => null);
+        if (seen) continue;
+        await this.redis.set(dedupe, '1', 'EX', 60 * 60 * 26).catch(() => null);
+        const msg =
+          daysLeft < 0
+            ? `A assinatura do grupo "${g.name || g.id}" (bot ${b.name}) expirou.`
+            : `A assinatura do grupo "${g.name || g.id}" (bot ${b.name}) expira em ${daysLeft} dia(s).`;
+        await this.notifications.create(b.tenantId, daysLeft < 0 ? 'error' : 'warning', 'Assinatura de grupo', msg).catch(() => null);
+        const arr = perTenant.get(b.tenantId) || [];
+        arr.push(msg);
+        perTenant.set(b.tenantId, arr);
+      }
+    }
+
+    // One summary email per tenant.
+    for (const [tenantId, msgs] of perTenant) {
+      const to = await this.mail.tenantAdminEmail(tenantId).catch(() => undefined);
+      if (!to) continue;
+      await this.mail
+        .send(to, 'Assinaturas de grupos a expirar', `<p>Atenção às seguintes assinaturas:</p><ul>${msgs.map((m) => `<li>${m}</li>`).join('')}</ul><p>Renova em <b>Grupos</b> no painel.</p>`)
+        .catch(() => null);
+    }
+  }
+
   /** Notify the tenant (panel + email) that a bot is down — deduped in Redis. */
   private async alertBotDown(bot: any) {
     const flag = `bot:${bot.id}:alerted`;
@@ -362,6 +411,160 @@ export class BotsService {
     cfg.manualGroups = (Array.isArray(cfg.manualGroups) ? cfg.manualGroups : []).filter((g: any) => String(g.id) !== String(groupId));
     await this.prisma.bot.update({ where: { id }, data: { config: cfg } });
     return { success: true };
+  }
+
+  /** A ready-to-use Baileys bot template that already reports groups & syncs. */
+  private templateFiles(): { name: string; content: string }[] {
+    const pkg = JSON.stringify(
+      {
+        name: 'hostagente-bot',
+        version: '1.0.0',
+        main: 'index.js',
+        scripts: { start: 'node index.js' },
+        dependencies: {
+          '@whiskeysockets/baileys': '^6.7.0',
+          ioredis: '^5.3.2',
+          'qrcode-terminal': '^0.12.0',
+        },
+      },
+      null,
+      2,
+    );
+    const index = `const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+} = require('@whiskeysockets/baileys');
+const qrcode = require('qrcode-terminal');
+const { startReporting } = require('./hostagente-report');
+
+async function start() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth');
+  const sock = makeWASocket({ auth: state, printQRInTerminal: false });
+
+  sock.ev.on('creds.update', saveCreds);
+  sock.ev.on('connection.update', (u) => {
+    const { connection, lastDisconnect, qr } = u;
+    if (qr) qrcode.generate(qr, { small: true });
+    if (connection === 'open') {
+      console.log('✅ Ligado ao WhatsApp!');
+      // Reporta os grupos ao painel HostAgente (usa as env do container).
+      startReporting(sock, {});
+    }
+    if (connection === 'close') {
+      const reconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      console.log('Conexão fechada. Reconectar:', reconnect);
+      if (reconnect) start();
+    }
+  });
+
+  // Handler de mensagens (defensivo: nunca faz .trim() de null).
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages && messages[0];
+    if (!msg || !msg.message || msg.key.fromMe) return;
+    const jid = msg.key.remoteJid;
+    const text =
+      msg.message.conversation ||
+      (msg.message.extendedTextMessage && msg.message.extendedTextMessage.text) ||
+      '';
+    const cmd = String(text || '').trim().toLowerCase();
+    if (cmd === '.ping') await sock.sendMessage(jid, { text: 'pong 🏓' });
+    if (cmd === '.sincronizar') {
+      await startReporting(sock, {});
+      await sock.sendMessage(jid, { text: 'Grupos sincronizados com o painel ✅' });
+    }
+  });
+}
+
+start();
+`;
+    // Reuse the reporter helper (kept in sync with examples/hostagente-report.js).
+    const reporter = `const fs = require('fs');
+const path = require('path');
+const API_URL = process.env.PAINEL_API_URL || process.env.HOSTAGENTE_URL || 'http://api:3000';
+const API_KEY = process.env.PAINEL_API_KEY || process.env.HOSTAGENTE_KEY || '';
+const BOT_ID = process.env.PAINEL_BOT_ID || process.env.BOT_ID || '';
+
+function detectServices(dir = path.join(process.cwd(), 'src', 'comandos')) {
+  try { return fs.readdirSync(dir).filter((f) => /\\.(js|mjs|cjs)$/.test(f)).map((f) => f.replace(/\\.(js|mjs|cjs)$/, '')); }
+  catch { return []; }
+}
+
+async function reportGroups(sock, opts = {}) {
+  if (!API_KEY || !BOT_ID) { console.log('[HostAgente] Falta PAINEL_API_KEY/BOT_ID.'); return; }
+  const services = opts.services && opts.services.length ? opts.services : detectServices();
+  const subs = opts.subscriptions || {};
+  const metaMap = await sock.groupFetchAllParticipating();
+  const groups = Object.values(metaMap).map((meta) => {
+    const admins = (meta.participants || []).filter((p) => p.admin).map((p) => '+' + String(p.id).split('@')[0]);
+    const sub = subs[meta.id] || {};
+    return { id: meta.id, name: meta.subject || 'Grupo', description: meta.desc || '', admins, services, participants: (meta.participants || []).length, plan: sub.plan, active: sub.active !== false };
+  });
+  const res = await fetch(API_URL + '/bot-api/bots/' + BOT_ID + '/groups', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': API_KEY }, body: JSON.stringify({ groups }),
+  });
+  console.log('[HostAgente] Reportei', groups.length, 'grupo(s):', await res.json().catch(() => ({})));
+}
+
+function startReporting(sock, opts = {}, intervalMs = 5 * 60 * 1000) {
+  const run = () => reportGroups(sock, opts).catch((e) => console.log('[HostAgente]', e.message));
+  run();
+  const timer = setInterval(run, intervalMs);
+  try {
+    const Redis = require('ioredis');
+    const sub = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
+    sub.on('error', () => {});
+    sub.subscribe('bot:' + BOT_ID + ':sync').catch(() => {});
+    sub.on('message', () => run());
+  } catch {}
+  return timer;
+}
+
+module.exports = { startReporting, reportGroups, detectServices };
+`;
+    const readme = `# Bot-modelo HostAgente
+
+Bot Baileys pronto que já reporta os grupos ao painel.
+
+## Como usar
+1. Cria um bot manual no painel HostAgente.
+2. Carrega este projeto (ZIP) na página do bot.
+3. Clica em **Iniciar**. Lê o QR code na consola do painel.
+4. Os grupos aparecem no painel automaticamente (e em \`.sincronizar\`).
+
+As credenciais (PAINEL_API_URL/KEY/BOT_ID) são injetadas pelo painel — não precisas de configurar nada.
+
+## Comandos
+- \`.ping\` → pong
+- \`.sincronizar\` → força o envio dos grupos ao painel
+
+Adiciona os teus comandos em \`src/comandos/\`.
+`;
+    return [
+      { name: 'package.json', content: pkg },
+      { name: 'index.js', content: index },
+      { name: 'hostagente-report.js', content: reporter },
+      { name: 'README.md', content: readme },
+      { name: 'src/comandos/.gitkeep', content: '' },
+    ];
+  }
+
+  async downloadTemplate(res: any) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const archiver = require('archiver');
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="bot-modelo-hostagente.zip"');
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', () => {
+      try {
+        res.status(500).end();
+      } catch {
+        /* ignore */
+      }
+    });
+    archive.pipe(res);
+    for (const f of this.templateFiles()) archive.append(f.content, { name: f.name });
+    await archive.finalize();
   }
 
   /** Stream the bot's project folder as a .zip download (excludes node_modules/.git). */
