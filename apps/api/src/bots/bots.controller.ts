@@ -40,6 +40,12 @@ export class BotsController {
     return this.service.create(user.tenantId!, body);
   }
 
+  // Aggregate group subscriptions (declared before ':id' routes).
+  @Get('subscriptions/groups')
+  groupSubscriptions(@CurrentUser() user: AuthUser) {
+    return this.service.groupSubscriptions(user.tenantId!);
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.service.get(user.tenantId!, id);
@@ -169,6 +175,16 @@ export class BotsController {
   @Post(':id/groups/sync')
   syncGroups(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.service.requestSync(user.tenantId!, id);
+  }
+
+  @Post(':id/groups/:groupId/renew')
+  renewGroup(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('groupId') groupId: string,
+    @Body() body: { months?: number },
+  ) {
+    return this.service.renewGroup(user.tenantId!, id, groupId, body?.months ?? 1);
   }
 
   @Delete(':id/groups/:groupId')

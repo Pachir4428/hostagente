@@ -4,6 +4,7 @@ export const TENANT_NAV: NavItem[] = [
   { href: '/dashboard', label: 'Resumo', icon: 'fa-solid fa-gauge-high' },
   { href: '/dashboard/transactions', label: 'Vendas', icon: 'fa-solid fa-arrow-right-arrow-left' },
   { href: '/dashboard/bots', label: 'Bots', icon: 'fa-solid fa-robot' },
+  { href: '/dashboard/grupos', label: 'Grupos', icon: 'fa-brands fa-whatsapp' },
   { href: '/dashboard/products', label: 'Pacotes', icon: 'fa-solid fa-box' },
   { href: '/dashboard/account', label: 'Conta & API', icon: 'fa-solid fa-gear' },
   { href: '/dashboard/subscription', label: 'Assinatura', icon: 'fa-solid fa-star' },

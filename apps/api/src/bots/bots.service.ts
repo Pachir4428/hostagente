@@ -222,6 +222,59 @@ export class BotsService {
     return out;
   }
 
+  /** All manually-registered group subscriptions across the tenant's bots. */
+  async groupSubscriptions(tenantId: string) {
+    const bots = await this.prisma.bot.findMany({
+      where: { tenantId },
+      select: { id: true, name: true, config: true },
+    });
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    const out: any[] = [];
+    for (const b of bots) {
+      const list: any[] = Array.isArray((b.config as any)?.manualGroups) ? (b.config as any).manualGroups : [];
+      for (const g of list) {
+        const until = g.validUntil ? new Date(g.validUntil).getTime() : null;
+        let state: 'active' | 'expiring' | 'expired' | 'none' = 'none';
+        let daysLeft: number | null = null;
+        if (until) {
+          daysLeft = Math.ceil((until - now) / DAY);
+          state = until < now ? 'expired' : daysLeft <= 7 ? 'expiring' : 'active';
+        }
+        out.push({
+          botId: b.id,
+          botName: b.name,
+          id: g.id,
+          name: g.name || g.id,
+          plan: g.plan || null,
+          validUntil: g.validUntil || null,
+          state,
+          daysLeft,
+        });
+      }
+    }
+    // Expiring/expired first, then by days left.
+    const rank = { expiring: 0, expired: 1, active: 2, none: 3 } as any;
+    out.sort((a, b) => (rank[a.state] - rank[b.state]) || ((a.daysLeft ?? 9999) - (b.daysLeft ?? 9999)));
+    return out;
+  }
+
+  /** Extend a group's subscription validity by N months (renewal). */
+  async renewGroup(tenantId: string, id: string, groupId: string, months: number) {
+    const bot = await this.get(tenantId, id);
+    const cfg: any = (bot.config as any) || {};
+    const list: any[] = Array.isArray(cfg.manualGroups) ? cfg.manualGroups : [];
+    const g = list.find((x) => String(x.id) === String(groupId));
+    if (!g) throw new BadRequestException('Grupo não encontrado');
+    // Extend from the later of now / current expiry.
+    const base = g.validUntil && new Date(g.validUntil).getTime() > Date.now() ? new Date(g.validUntil) : new Date();
+    base.setMonth(base.getMonth() + (months || 1));
+    g.validUntil = base.toISOString().slice(0, 10);
+    cfg.manualGroups = list;
+    await this.prisma.bot.update({ where: { id }, data: { config: cfg } });
+    return { success: true, validUntil: g.validUntil };
+  }
+
   /** Register or update a group manually (by WhatsApp id) with plan/validity. */
   async addGroup(
     tenantId: string,
