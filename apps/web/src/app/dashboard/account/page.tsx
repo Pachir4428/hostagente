@@ -15,11 +15,26 @@ export default function AccountPage() {
   const [form, setForm] = useState({ name: '', contact: '', receivingNumber: '' });
   const [saving, setSaving] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  const [twoFA, setTwoFA] = useState(false);
+  const [twoFABusy, setTwoFABusy] = useState(false);
+
+  async function toggle2FA() {
+    setTwoFABusy(true);
+    try {
+      const res = await authApi.post('/auth/2fa/toggle', { enabled: !twoFA });
+      setTwoFA(res.data.twoFactorEnabled);
+    } catch {
+      alert('Não foi possível alterar. (Precisa de SMTP configurado para enviar o código.)');
+    } finally {
+      setTwoFABusy(false);
+    }
+  }
 
   async function load() {
-    const [a, k] = await Promise.all([authApi.get('/account'), authApi.get('/account/api-keys')]);
+    const [a, k, me] = await Promise.all([authApi.get('/account'), authApi.get('/account/api-keys'), authApi.get('/auth/me')]);
     setAccount(a.data);
     setKeys(k.data);
+    setTwoFA(!!me.data?.twoFactorEnabled);
     setForm({
       name: a.data?.name ?? '',
       contact: a.data?.contact ?? '',
@@ -116,6 +131,26 @@ export default function AccountPage() {
               </code>
             </div>
           </div>
+        </div>
+      )}
+
+      {!loading && (
+        <div className="card mt-6 max-w-2xl p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-display font-semibold"><i className="fa-solid fa-shield-halved mr-2 text-teal" />Verificação em duas etapas (2FA)</h2>
+              <p className="mt-1 text-sm text-muted">Ao entrar, pedimos um código de 6 dígitos enviado para o teu email. Mais segurança para a tua conta.</p>
+            </div>
+            <button
+              onClick={toggle2FA}
+              disabled={twoFABusy}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition ${twoFA ? 'bg-teal' : 'bg-line'}`}
+              aria-label="Alternar 2FA"
+            >
+              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${twoFA ? 'left-[22px]' : 'left-0.5'}`} />
+            </button>
+          </div>
+          {twoFA && <p className="mt-3 text-xs text-teal"><i className="fa-solid fa-check mr-1" />Ativa. Precisa de SMTP configurado pelo administrador para enviar os códigos.</p>}
         </div>
       )}
     </AppShell>

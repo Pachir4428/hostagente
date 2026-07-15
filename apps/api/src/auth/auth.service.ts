@@ -1,21 +1,74 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
+import Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 
 function newApiKey(): string {
   return 'hka_' + randomBytes(24).toString('hex');
 }
 
+const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+
 @Injectable()
 export class AuthService {
+  private redis = new Redis(REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 2 });
+
   constructor(
     private jwtService: JwtService,
     private configService: ConfigService,
     private prisma: PrismaService,
-  ) {}
+    private mail: MailService,
+  ) {
+    this.redis.on('error', () => {});
+  }
+
+  /** Start 2FA: email a 6-digit code and return a temp token to verify with. */
+  async beginTwoFactor(user: { id: string; email: string }) {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const tempToken = randomBytes(24).toString('hex');
+    try {
+      await this.redis.set(`2fa:${tempToken}`, JSON.stringify({ userId: user.id, code }), 'EX', 600);
+    } catch {
+      // If Redis is down, fail safe by not requiring 2FA (avoid lockout).
+      return null;
+    }
+    await this.mail
+      .send(user.email, 'O teu código de acesso', `<p>O teu código de verificação é:</p><p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p><p>Expira em 10 minutos.</p>`)
+      .catch(() => null);
+    return { twoFactorRequired: true, tempToken };
+  }
+
+  /** Verify a 2FA code and issue tokens. */
+  async verifyTwoFactor(tempToken: string, code: string) {
+    let raw: string | null = null;
+    try {
+      raw = await this.redis.get(`2fa:${tempToken}`);
+    } catch {
+      throw new BadRequestException('Sessão de verificação indisponível');
+    }
+    if (!raw) throw new UnauthorizedException('Código expirado. Entra novamente.');
+    const data = JSON.parse(raw);
+    if (String(code).trim() !== data.code) throw new UnauthorizedException('Código incorreto');
+    await this.redis.del(`2fa:${tempToken}`).catch(() => null);
+    const user = await this.prisma.user.findUnique({ where: { id: data.userId } });
+    if (!user) throw new UnauthorizedException('Utilizador não encontrado');
+    const { passwordHash, ...result } = user;
+    return this.login(result);
+  }
+
+  async setTwoFactor(userId: string, enabled: boolean) {
+    await this.prisma.user.update({ where: { id: userId }, data: { twoFactorEnabled: enabled } });
+    return { success: true, twoFactorEnabled: enabled };
+  }
+
+  async isTwoFactorEnabled(userId: string): Promise<boolean> {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { twoFactorEnabled: true } }).catch(() => null);
+    return !!u?.twoFactorEnabled;
+  }
 
   async validateUser(email: string, password: string): Promise<any> {
     const user = await this.prisma.user.findUnique({ where: { email } });

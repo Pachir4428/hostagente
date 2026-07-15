@@ -14,6 +14,27 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [tempToken, setTempToken] = useState('');
+  const [code, setCode] = useState('');
+
+  function afterLogin(data: any) {
+    setToken(data.accessToken);
+    router.replace(data.user?.role === 'SUPER_ADMIN' ? '/admin' : '/dashboard');
+  }
+
+  async function verifyCode(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/2fa/verify', { tempToken, code });
+      afterLogin(res.data);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Código incorreto.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -21,8 +42,12 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await api.post('/auth/login', { email, password });
-      setToken(res.data.accessToken);
-      router.replace(res.data.user?.role === 'SUPER_ADMIN' ? '/admin' : '/dashboard');
+      if (res.data?.twoFactorRequired) {
+        setTempToken(res.data.tempToken);
+        setLoading(false);
+        return;
+      }
+      afterLogin(res.data);
     } catch (err: any) {
       if (!err.response) {
         // No HTTP response = the API is unreachable (down / wrong URL / CORS).
@@ -72,6 +97,35 @@ export default function LoginPage() {
           <h1 className="font-display text-3xl font-bold">Bem-vindo de volta</h1>
           <p className="mt-2 text-muted">Entra para gerir as tuas vendas.</p>
 
+          {tempToken ? (
+            <form onSubmit={verifyCode} className="mt-8 space-y-4">
+              {error && (
+                <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>
+              )}
+              <div className="rounded-xl border border-teal/25 bg-teal/10 px-4 py-3 text-sm text-teal">
+                <i className="fa-solid fa-shield-halved mr-1" /> Enviámos um código de 6 dígitos para o teu email.
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-muted">Código de verificação</label>
+                <input
+                  inputMode="numeric"
+                  maxLength={6}
+                  required
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                  className="field text-center font-mono text-2xl tracking-[0.4em]"
+                  placeholder="000000"
+                  autoFocus
+                />
+              </div>
+              <button type="submit" disabled={loading || code.length < 6} className="btn-primary w-full">
+                {loading ? 'A verificar…' : 'Confirmar'}
+              </button>
+              <button type="button" onClick={() => { setTempToken(''); setCode(''); setError(''); }} className="w-full text-center text-xs text-muted hover:text-ink">
+                Voltar
+              </button>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
             {error && (
               <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
@@ -103,6 +157,7 @@ export default function LoginPage() {
               {loading ? 'A entrar…' : 'Entrar'}
             </button>
           </form>
+          )}
 
           <p className="mt-8 text-center text-sm text-muted">
             Ainda não tens conta?{' '}

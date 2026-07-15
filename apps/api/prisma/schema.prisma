@@ -105,6 +105,7 @@ model User {
   passwordHash String
   role         Role     @default(TENANT_ADMIN)
   canEdit      Boolean  @default(false) // STAFF: can edit vs. view-only
+  twoFactorEnabled Boolean @default(false) // 2FA por código de email
   tenantId     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
