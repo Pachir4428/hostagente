@@ -6,10 +6,12 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { json, urlencoded } from 'express';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.useGlobalFilters(new AllExceptionsFilter());
   app.use(helmet());
   app.use(compression());
   app.use(cookieParser());

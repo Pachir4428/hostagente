@@ -22,7 +22,9 @@ export class AuthController {
   @Post('login')
   async login(@Request() req, @Res({ passthrough: true }) res: Response) {
     // If 2FA is on, email a code and require verification instead of signing in.
-    if (req.user?.twoFactorEnabled) {
+    // Checked defensively so a pending migration never blocks login.
+    const twoFA = await this.authService.isTwoFactorEnabled(req.user?.id || req.user?.sub);
+    if (twoFA) {
       const started = await this.authService.beginTwoFactor(req.user);
       if (started) return started; // { twoFactorRequired: true, tempToken }
     }

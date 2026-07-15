@@ -71,7 +71,12 @@ export class AuthService {
   }
 
   async validateUser(email: string, password: string): Promise<any> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    // Select only stable columns so a pending migration (e.g. new column)
+    // can't break login. 2FA state is fetched defensively elsewhere.
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, name: true, passwordHash: true, role: true, tenantId: true },
+    });
     if (!user) throw new UnauthorizedException('Credenciais inválidas');
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Credenciais inválidas');
