@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
 import { AppShell } from '@/components/AppShell';
+import { CodeEditor } from '@/components/CodeEditor';
 import { TENANT_NAV } from '@/lib/nav';
 
 interface Bot {
@@ -80,6 +81,8 @@ export default function BotConsolePage() {
   const replaceTarget = useRef<string>('');
   const [editing, setEditing] = useState<{ path: string; content: string } | null>(null);
   const [savingFile, setSavingFile] = useState(false);
+  const [history, setHistory] = useState<{ version: string; at: string }[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [startCmd, setStartCmd] = useState('');
   const [workdir, setWorkdir] = useState('');
   const [savingCfg, setSavingCfg] = useState(false);
@@ -311,6 +314,32 @@ export default function BotConsolePage() {
     const res = await authApi.get(`/bots/${id}/file`, { params: { path } });
     if (res.data.tooLarge) return alert('Ficheiro demasiado grande para editar.');
     setEditing({ path, content: res.data.content || '' });
+    setShowHistory(false);
+    setHistory([]);
+  }
+  async function loadHistory() {
+    if (!editing) return;
+    try {
+      const res = await authApi.get(`/bots/${id}/file/history`, { params: { path: editing.path } });
+      setHistory(res.data || []);
+      setShowHistory(true);
+    } catch {
+      setHistory([]);
+      setShowHistory(true);
+    }
+  }
+  async function revertTo(version: string) {
+    if (!editing || !confirm('Reverter para esta versão? A versão atual é guardada no histórico.')) return;
+    try {
+      await authApi.post(`/bots/${id}/file/revert`, { path: editing.path, version });
+      const res = await authApi.get(`/bots/${id}/file`, { params: { path: editing.path } });
+      setEditing({ path: editing.path, content: res.data.content || '' });
+      setLogs((prev) => [...prev, `↩️ Ficheiro revertido: ${editing.path}. Reinicia o bot para aplicar.`]);
+      loadHistory();
+      loadFiles();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Não foi possível reverter');
+    }
   }
   async function saveFile() {
     if (!editing) return;
@@ -922,17 +951,36 @@ export PAINEL_BOT_ID=${id}`}</pre>
       {/* File editor */}
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setEditing(null)}>
-          <div className="card flex max-h-[85vh] w-full max-w-3xl flex-col p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
+          <div className="card flex max-h-[88vh] w-full max-w-4xl flex-col p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3">
               <h2 className="truncate font-mono text-sm font-semibold">{editing.path}</h2>
-              <button onClick={() => setEditing(null)} className="text-muted hover:text-ink"><i className="fa-solid fa-xmark" /></button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => (showHistory ? setShowHistory(false) : loadHistory())} className={`text-xs ${showHistory ? 'text-teal' : 'text-muted hover:text-ink'}`} title="Histórico de versões">
+                  <i className="fa-solid fa-clock-rotate-left mr-1" />Histórico
+                </button>
+                <button onClick={() => setEditing(null)} className="text-muted hover:text-ink"><i className="fa-solid fa-xmark" /></button>
+              </div>
             </div>
-            <textarea
-              value={editing.content}
-              onChange={(e) => setEditing({ ...editing, content: e.target.value })}
-              spellCheck={false}
-              className="field mt-4 min-h-[50vh] flex-1 font-mono text-xs"
-            />
+            <div className="mt-4 flex min-h-0 flex-1 gap-3">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <CodeEditor value={editing.content} onChange={(v) => setEditing({ ...editing, content: v })} path={editing.path} />
+              </div>
+              {showHistory && (
+                <div className="w-48 shrink-0 overflow-y-auto rounded-lg border border-line p-2">
+                  <p className="mb-2 px-1 text-xs font-semibold text-muted">Versões anteriores</p>
+                  {history.length === 0 ? (
+                    <p className="px-1 text-xs text-muted2">Sem versões guardadas ainda. São criadas quando guardas alterações.</p>
+                  ) : (
+                    history.map((h) => (
+                      <button key={h.version} onClick={() => revertTo(h.version)} className="mb-1 block w-full rounded px-2 py-1.5 text-left text-xs text-muted transition hover:bg-hover hover:text-ink">
+                        <i className="fa-solid fa-rotate-left mr-1 text-teal" />
+                        {new Date(h.at).toLocaleString('pt-PT')}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
             <div className="mt-4 flex justify-end gap-3">
               <button onClick={() => setEditing(null)} className="btn-ghost">Fechar</button>
               <button onClick={saveFile} disabled={savingFile} className="btn-primary">{savingFile ? 'A guardar…' : 'Guardar'}</button>

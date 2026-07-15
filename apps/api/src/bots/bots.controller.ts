@@ -167,6 +167,20 @@ export class BotsController {
     return this.service.deletePath(user.tenantId!, id, p || '');
   }
 
+  @Get(':id/file/history')
+  fileHistory(@CurrentUser() user: AuthUser, @Param('id') id: string, @Query('path') p: string) {
+    return this.service.fileHistory(user.tenantId!, id, p || '');
+  }
+
+  @Post(':id/file/revert')
+  revertFile(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: { path: string; version: string },
+  ) {
+    return this.service.revertFile(user.tenantId!, id, body.path, body.version);
+  }
+
   @Post(':id/command')
   command(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { command: string }) {
     return this.service.sendCommand(user.tenantId!, id, body.command ?? '');

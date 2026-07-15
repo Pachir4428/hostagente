@@ -670,7 +670,7 @@ Adiciona os teus comandos em \`src/comandos/\`.
     await this.get(tenantId, id);
     const base = this.baseDir(id);
     const out: { path: string; type: 'file' | 'dir'; size: number }[] = [];
-    const skip = new Set(['node_modules', '.git']);
+    const skip = new Set(['node_modules', '.git', '.history']);
     async function walk(dir: string, prefix: string, depth: number) {
       if (depth > 6) return;
       let entries: any[] = [];
@@ -718,12 +718,69 @@ Adiciona os teus comandos em \`src/comandos/\`.
     }
   }
 
+  // Keep timestamped backups of a file before overwriting, so updates can be
+  // reverted. Stored under .history/<rel>/<timestamp> (max 10 per file).
+  private historyDir(id: string, rel: string) {
+    return this.safe(id, path.posix.join('.history', rel));
+  }
+  private async backupFile(id: string, rel: string) {
+    if (rel.startsWith('.history')) return;
+    const p = this.safe(id, rel);
+    try {
+      const stat = await fs.stat(p);
+      if (!stat.isFile() || stat.size > 1024 * 1024) return;
+      const dir = this.historyDir(id, rel);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.copyFile(p, path.join(dir, String(Date.now())));
+      const entries = (await fs.readdir(dir)).sort();
+      for (const old of entries.slice(0, Math.max(0, entries.length - 10))) {
+        await fs.rm(path.join(dir, old), { force: true }).catch(() => null);
+      }
+    } catch {
+      /* no existing file to back up */
+    }
+  }
+
   async writeFileContent(tenantId: string, id: string, rel: string, content: string) {
     await this.get(tenantId, id);
     const p = this.safe(id, rel);
+    await this.backupFile(id, rel);
     await fs.mkdir(path.dirname(p), { recursive: true });
     await fs.writeFile(p, content ?? '', 'utf8');
     await this.prisma.bot.update({ where: { id }, data: { hasScript: true } }).catch(() => null);
+    return { success: true };
+  }
+
+  /** List backup versions of a file (newest first). */
+  async fileHistory(tenantId: string, id: string, rel: string) {
+    await this.get(tenantId, id);
+    const dir = this.historyDir(id, rel);
+    try {
+      const entries = await fs.readdir(dir);
+      return entries
+        .map((ts) => ({ version: ts, at: new Date(Number(ts)).toISOString() }))
+        .sort((a, b) => Number(b.version) - Number(a.version));
+    } catch {
+      return [];
+    }
+  }
+
+  /** Restore a file to a previous version (backs up the current one first). */
+  async revertFile(tenantId: string, id: string, rel: string, version: string) {
+    await this.get(tenantId, id);
+    const dir = this.historyDir(id, rel);
+    const src = path.join(dir, path.basename(version));
+    if (!src.startsWith(dir)) throw new BadRequestException('Versão inválida');
+    let content: Buffer;
+    try {
+      content = await fs.readFile(src);
+    } catch {
+      throw new BadRequestException('Versão não encontrada');
+    }
+    await this.backupFile(id, rel); // preserve current before reverting
+    const p = this.safe(id, rel);
+    await fs.mkdir(path.dirname(p), { recursive: true });
+    await fs.writeFile(p, content);
     return { success: true };
   }
 
@@ -747,6 +804,7 @@ Adiciona os teus comandos em \`src/comandos/\`.
       for (const f of files) {
         if (!f.rel) continue;
         const p = this.safe(id, f.rel);
+        await this.backupFile(id, f.rel); // keep previous version for revert
         await fs.mkdir(path.dirname(p), { recursive: true });
         await fs.writeFile(p, f.buffer);
         count++;
