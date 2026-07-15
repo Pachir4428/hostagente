@@ -16,6 +16,7 @@ interface Summary {
   macrodroid: { online: boolean; lastSeen: string | null; minutesSince: number | null };
   plan: string | null;
   subscriptionStatus: string | null;
+  degraded?: boolean;
 }
 
 export default function TenantDashboard() {
@@ -60,6 +61,11 @@ export default function TenantDashboard() {
         </div>
       ) : (
         <div className="space-y-6">
+          {data.degraded && (
+            <div className="card border-gold/30 bg-gold/5 p-4 text-sm text-gold">
+              <i className="fa-solid fa-triangle-exclamation mr-1" /> O resumo está em modo reduzido — a base de dados pode estar desatualizada. Corre <span className="font-mono">bash scripts/deploy.sh --no-cache</span> (faz o db push) na VPS.
+            </div>
+          )}
           <OnboardingChecklist />
 
           {/* MacroDroid status */}

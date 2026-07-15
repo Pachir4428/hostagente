@@ -66,6 +66,32 @@ export class DashboardService {
   }
 
   async summary(tenantId: string) {
+    try {
+      return await this.buildSummary(tenantId);
+    } catch (err: any) {
+      // Never 500 the Resumo — return a safe empty summary and log the cause.
+      // eslint-disable-next-line no-console
+      console.error('dashboard.summary error:', err?.message);
+      const empty: { date: string; sales: number; revenue: number }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        empty.push({ date: d.toISOString().slice(0, 10), sales: 0, revenue: 0 });
+      }
+      return {
+        salesToday: 0,
+        revenueToday: 0,
+        lastTransaction: null,
+        series: empty,
+        macrodroid: { online: false, lastSeen: null, minutesSince: null },
+        plan: null,
+        subscriptionStatus: null,
+        degraded: true,
+      };
+    }
+  }
+
+  private async buildSummary(tenantId: string) {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const sevenDaysAgo = new Date(startOfToday);
@@ -83,9 +109,15 @@ export class DashboardService {
         where: { tenantId, createdAt: { gte: sevenDaysAgo } },
         select: { amount: true, status: true, createdAt: true },
       }),
+      // select only what we need so a schema drift (e.g. new columns not yet
+      // pushed) can't break the whole Resumo.
       this.prisma.tenant.findUnique({
         where: { id: tenantId },
-        include: { subscription: { include: { plan: true } }, plan: true },
+        select: {
+          status: true,
+          plan: { select: { name: true } },
+          subscription: { select: { status: true, plan: { select: { name: true } } } },
+        },
       }),
     ]);
 

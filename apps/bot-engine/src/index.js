@@ -221,7 +221,13 @@ function spawnChild() {
   setStatus('connected'); // "a correr"
   startedAt = Date.now();
   publishStats();
-  child = spawn('sh', ['-c', currentStart], { cwd: workdir, env: { ...process.env }, stdio: ['pipe', 'pipe', 'pipe'] });
+  // Auto-injeção: reporta QR/grupos/broadcast sem o utilizador mexer no código.
+  const injectPath = path.join(__dirname, 'inject.js');
+  const childEnv = {
+    ...process.env,
+    NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require ${injectPath}`].filter(Boolean).join(' '),
+  };
+  child = spawn('sh', ['-c', currentStart], { cwd: workdir, env: childEnv, stdio: ['pipe', 'pipe', 'pipe'] });
   streamLines(child.stdout);
   streamLines(child.stderr);
   child.on('exit', (code) => {
