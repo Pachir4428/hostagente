@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { io, Socket } from 'socket.io-client';
 import { authApi } from '@/lib/api';
+import { getToken } from '@/lib/auth';
 import { useAuth } from '@/lib/useAuth';
 import { AppShell } from '@/components/AppShell';
 import { CodeEditor } from '@/components/CodeEditor';
@@ -175,8 +177,31 @@ export default function BotConsolePage() {
     loadLive();
     loadFiles();
     authApi.get('/account/api-keys').then((r) => setApiKey(r.data?.[0]?.key || '')).catch(() => {});
-    const iv = setInterval(loadLive, 2000);
-    return () => clearInterval(iv);
+
+    // Real-time via WebSocket; HTTP poll stays as a slower fallback / resync.
+    let socket: Socket | null = null;
+    try {
+      const base = process.env.NEXT_PUBLIC_API_URL || '';
+      socket = io(base, { transports: ['websocket', 'polling'], reconnection: true });
+      socket.on('connect', () => socket?.emit('subscribe', { botId: id, token: getToken() }));
+      socket.on('live', (evt: any) => {
+        if (evt?.type === 'log' && typeof evt.line === 'string') {
+          setLogs((prev) => [...prev.slice(-799), evt.line]);
+        } else if (evt?.type === 'status') {
+          setStatus(evt.status);
+        } else if (evt?.type === 'stats') {
+          setStats(evt.stats);
+        }
+      });
+    } catch {
+      /* fallback to polling only */
+    }
+
+    const iv = setInterval(loadLive, 6000);
+    return () => {
+      clearInterval(iv);
+      socket?.disconnect();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 

@@ -51,6 +51,13 @@ function clean(s) {
   return String(s).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\r/g, '');
 }
 
+// Real-time stream to the web console via Redis pub/sub (in addition to the
+// stored log list, which is the fallback when a client connects late).
+const STREAM = `bot:${BOT_ID}:stream`;
+function emitStream(evt) {
+  redis.publish(STREAM, JSON.stringify(evt)).catch(() => {});
+}
+
 function log(line) {
   const text = clean(line);
   if (text.trim() === '') return;
@@ -59,10 +66,12 @@ function log(line) {
   redis.rpush(K.logs, text).catch(() => {});
   redis.ltrim(K.logs, -800, -1).catch(() => {});
   redis.expire(K.logs, 60 * 60 * 24).catch(() => {});
+  emitStream({ type: 'log', line: text });
 }
 
 function setStatus(s) {
   redis.set(K.status, s, 'EX', 60 * 60 * 24).catch(() => {});
+  emitStream({ type: 'status', status: s });
 }
 
 // Publish live stats for the web console (uptime, restarts, activity).
@@ -75,6 +84,7 @@ function publishStats() {
     lastActivity,
   };
   redis.set(K.stats, JSON.stringify(stats), 'EX', 60 * 60 * 24).catch(() => {});
+  emitStream({ type: 'stats', stats });
 }
 
 function streamLines(stream) {
