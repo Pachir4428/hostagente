@@ -1,10 +1,25 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class TenantsService {
-  constructor(private prisma: PrismaService, private audit: AuditService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+    private auth: AuthService,
+  ) {}
+
+  /** Issue an access token for a tenant's admin so a SUPER_ADMIN can support them. */
+  async impersonate(actorEmail: string, tenantId: string) {
+    const user = await this.prisma.user.findFirst({ where: { tenantId, role: 'TENANT_ADMIN' } });
+    if (!user) throw new BadRequestException('Este tenant não tem administrador.');
+    this.audit.log(actorEmail, 'SUPER_ADMIN', 'tenant.impersonate', { tenantId, userEmail: user.email });
+    const { passwordHash, ...result } = user;
+    const tokens = await this.auth.login(result);
+    return { accessToken: tokens.accessToken, user: result };
+  }
 
   async list() {
     const tenants = await this.prisma.tenant.findMany({

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { clearToken } from '@/lib/auth';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
@@ -32,6 +32,23 @@ export function AppShell({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [impersonating, setImpersonating] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('admin_token')) {
+      setImpersonating(localStorage.getItem('impersonating') || 'revendedor');
+    }
+  }, []);
+
+  function backToAdmin() {
+    const adminToken = localStorage.getItem('admin_token');
+    if (adminToken) {
+      localStorage.setItem('access_token', adminToken);
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('impersonating');
+      router.replace('/admin/tenants');
+    }
+  }
 
   function logout() {
     clearToken();
@@ -146,6 +163,12 @@ export function AppShell({
             </div>
           </div>
         </header>
+        {impersonating && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gold/30 bg-gold/10 px-5 py-2 text-sm text-gold">
+            <span><i className="fa-solid fa-user-secret mr-1" /> A ver como <b>{impersonating}</b> (modo suporte).</span>
+            <button onClick={backToAdmin} className="rounded-lg border border-gold/40 px-3 py-1 text-xs font-medium hover:bg-gold/15">Voltar ao admin</button>
+          </div>
+        )}
         <main className="min-w-0 flex-1 p-5 sm:p-8">{children}</main>
       </div>
       <AssistantWidget />

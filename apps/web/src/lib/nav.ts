@@ -20,6 +20,9 @@ export const TENANT_NAV: NavItem[] = [
 export const ADMIN_NAV: NavItem[] = [
   { href: '/admin', label: 'Plataforma', icon: 'fa-solid fa-gauge-high' },
   { href: '/admin/tenants', label: 'Tenants', icon: 'fa-solid fa-building' },
+  { href: '/admin/bots', label: 'Bots (global)', icon: 'fa-solid fa-robot' },
+  { href: '/admin/health', label: 'Saúde do sistema', icon: 'fa-solid fa-heart-pulse' },
+  { href: '/admin/growth', label: 'Crescimento', icon: 'fa-solid fa-arrow-trend-up' },
   { href: '/admin/plans', label: 'Planos & Cupões', icon: 'fa-solid fa-tags' },
   { href: '/admin/billing', label: 'Pagamentos', icon: 'fa-solid fa-file-invoice-dollar' },
   { href: '/admin/reports', label: 'Relatórios', icon: 'fa-solid fa-chart-line' },

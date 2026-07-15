@@ -2,6 +2,7 @@ import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/roles.guard';
 import { Roles } from '../common/roles.decorator';
+import { CurrentUser, AuthUser } from '../common/current-user.decorator';
 import { TenantsService } from './tenants.service';
 
 @Controller('admin/tenants')
@@ -28,5 +29,10 @@ export class TenantsController {
   @Post(':id/reactivate')
   reactivate(@Param('id') id: string) {
     return this.service.setStatus(id, 'active');
+  }
+
+  @Post(':id/impersonate')
+  impersonate(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.service.impersonate(user.email, id);
   }
 }

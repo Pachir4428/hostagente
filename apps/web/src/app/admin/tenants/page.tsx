@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api';
+import { getToken, setToken } from '@/lib/auth';
 import { useAuth } from '@/lib/useAuth';
 import { AppShell } from '@/components/AppShell';
 import { ADMIN_NAV } from '@/lib/nav';
@@ -28,7 +30,22 @@ const STATUS_CHIP: Record<string, string> = {
 
 export default function AdminTenantsPage() {
   const { user, loading } = useAuth('SUPER_ADMIN');
+  const router = useRouter();
   const [rows, setRows] = useState<TenantRow[]>([]);
+
+  async function impersonate(id: string, name: string) {
+    if (!confirm(`Entrar como "${name}"? Vais ver o painel deste revendedor.`)) return;
+    try {
+      const res = await authApi.post(`/admin/tenants/${id}/impersonate`);
+      const adminToken = getToken();
+      if (adminToken) localStorage.setItem('admin_token', adminToken); // para voltar
+      localStorage.setItem('impersonating', name);
+      setToken(res.data.accessToken);
+      router.replace('/dashboard');
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Não foi possível entrar como este revendedor.');
+    }
+  }
 
   async function load() {
     const res = await authApi.get('/admin/tenants');
@@ -81,9 +98,14 @@ export default function AdminTenantsPage() {
                     <td className="px-4 py-3 font-semibold text-teal">{mzn(t.revenue)}</td>
                     <td className="px-4 py-3 text-muted">{dateTime(t.createdAt)}</td>
                     <td className="px-4 py-3">
-                      <button onClick={() => suspend(t.id, t.status)} className="btn-ghost !px-3 !py-1.5 text-xs">
-                        {t.status === 'suspended' ? 'Reativar' : 'Suspender'}
-                      </button>
+                      <div className="flex gap-1.5">
+                        <button onClick={() => impersonate(t.id, t.name)} className="btn-ghost !px-3 !py-1.5 text-xs" title="Entrar como este revendedor">
+                          <i className="fa-solid fa-right-to-bracket" /> Entrar como
+                        </button>
+                        <button onClick={() => suspend(t.id, t.status)} className="btn-ghost !px-3 !py-1.5 text-xs">
+                          {t.status === 'suspended' ? 'Reativar' : 'Suspender'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
