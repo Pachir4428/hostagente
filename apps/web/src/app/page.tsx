@@ -7,6 +7,7 @@ import { Logo } from '@/components/Logo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useBranding } from '@/lib/branding';
 import { renderIcon } from '@/components/IconPicker';
+import { CodeGenerator } from '@/components/CodeGenerator';
 
 const features = [
   { icon: 'fa-solid fa-bolt', title: 'Deteção automática', desc: 'O MacroDroid lê o SMS de M-Pesa/e-Mola e a venda é registada em segundos, sem toques.' },
@@ -60,6 +61,7 @@ export default function Home() {
           <Logo />
           <nav className="hidden items-center gap-8 text-sm text-muted md:flex">
             <a href="#features" className="transition hover:text-ink">Funcionalidades</a>
+            <a href="#gerador" className="transition hover:text-ink">Gerador grátis</a>
             <a href="#how" className="transition hover:text-ink">Como funciona</a>
             <a href="#pricing" className="transition hover:text-ink">Planos</a>
           </nav>
@@ -127,6 +129,18 @@ export default function Home() {
               <p className="mt-2 text-sm leading-relaxed text-muted">{f.desc}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Free code generator (lead magnet) */}
+      <section id="gerador" className="mx-auto max-w-6xl px-5 py-20">
+        <div className="text-center">
+          <span className="chip mx-auto border border-teal/25 bg-teal/10 text-teal">Grátis</span>
+          <h2 className="mt-4 font-display text-3xl font-bold sm:text-4xl">Gera código para o teu bot WhatsApp</h2>
+          <p className="mx-auto mt-3 max-w-xl text-muted">Cria comandos Baileys e nanos em segundos. Experimenta grátis — depois cria conta para gerar sem limite e <b>hospedar os teus bots</b>.</p>
+        </div>
+        <div className="mt-10">
+          <CodeGenerator gated freeUses={2} />
         </div>
       </section>
 
