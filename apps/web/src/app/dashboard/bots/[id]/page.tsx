@@ -83,6 +83,10 @@ export default function BotConsolePage() {
   const [savingFile, setSavingFile] = useState(false);
   const [history, setHistory] = useState<{ version: string; at: string }[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [bcOpen, setBcOpen] = useState(false);
+  const [bcMsg, setBcMsg] = useState('');
+  const [bcAudience, setBcAudience] = useState<'all' | 'recent30'>('all');
+  const [bcSending, setBcSending] = useState(false);
   const [startCmd, setStartCmd] = useState('');
   const [workdir, setWorkdir] = useState('');
   const [savingCfg, setSavingCfg] = useState(false);
@@ -487,6 +491,27 @@ module.exports = {
     await loadLive();
   }
 
+  async function sendBroadcast() {
+    const m = bcMsg.trim();
+    if (!m) return;
+    if (!confirm('Enviar esta mensagem aos teus clientes? Evita spam para não arriscar o número.')) return;
+    setBcSending(true);
+    try {
+      const res = await authApi.post(`/bots/${id}/broadcast`, { message: m, audience: bcAudience });
+      if (res.data?.success === false) {
+        alert(res.data.message || 'Não foi possível enviar.');
+      } else {
+        alert(`Broadcast enviado ao bot para ${res.data.count} cliente(s).`);
+        setBcOpen(false);
+        setBcMsg('');
+      }
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Falha no broadcast');
+    } finally {
+      setBcSending(false);
+    }
+  }
+
   async function remove() {
     if (!confirm('Eliminar este bot?')) return;
     await authApi.delete(`/bots/${id}`);
@@ -555,6 +580,7 @@ module.exports = {
               <button onClick={() => control('stop')} disabled={!!busy} className="btn-ghost"><i className="fa-solid fa-stop" /> Parar</button>
             )}
             <button onClick={() => control('restart')} disabled={!!busy} className="btn-ghost" title="Reiniciar"><i className="fa-solid fa-rotate" /></button>
+            <button onClick={() => setBcOpen(true)} className="btn-ghost" title="Enviar mensagem aos clientes"><i className="fa-solid fa-bullhorn" /></button>
             <button onClick={remove} disabled={!!busy} className="btn-danger" title="Eliminar"><i className="fa-solid fa-trash" /></button>
           </div>
         )}
@@ -943,6 +969,36 @@ export PAINEL_BOT_ID=${id}`}</pre>
             <div className="mt-4 flex justify-end gap-3">
               <button onClick={() => setCreator(null)} className="btn-ghost">Cancelar</button>
               <button onClick={saveCreator} disabled={savingCreator || !creator.path} className="btn-primary">{savingCreator ? 'A criar…' : 'Criar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Broadcast */}
+      {bcOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setBcOpen(false)}>
+          <div className="card w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-lg font-bold"><i className="fa-solid fa-bullhorn mr-2 text-teal" />Broadcast aos clientes</h2>
+              <button onClick={() => setBcOpen(false)} className="text-muted hover:text-ink"><i className="fa-solid fa-xmark" /></button>
+            </div>
+            <p className="mt-1 text-sm text-muted">Envia uma mensagem aos números que já compraram (via o bot). Usa com moderação para não arriscares o número.</p>
+            <label className="mt-4 block text-sm">
+              <span className="mb-1 block text-muted">Público</span>
+              <select value={bcAudience} onChange={(e) => setBcAudience(e.target.value as any)} className="field text-sm">
+                <option value="all">Todos os clientes</option>
+                <option value="recent30">Compraram nos últimos 30 dias</option>
+              </select>
+            </label>
+            <label className="mt-3 block text-sm">
+              <span className="mb-1 block text-muted">Mensagem</span>
+              <textarea value={bcMsg} onChange={(e) => setBcMsg(e.target.value)} className="field min-h-[120px] text-sm" placeholder="Ex: 🎉 Promoção! 50 MT = 700 MB só hoje. Envia o comprovante." />
+            </label>
+            <div className="mt-4 flex justify-end gap-3">
+              <button onClick={() => setBcOpen(false)} className="btn-ghost">Cancelar</button>
+              <button onClick={sendBroadcast} disabled={bcSending || !bcMsg.trim() || !running} className="btn-primary">
+                {bcSending ? 'A enviar…' : !running ? 'Bot tem de estar a correr' : 'Enviar'}
+              </button>
             </div>
           </div>
         </div>

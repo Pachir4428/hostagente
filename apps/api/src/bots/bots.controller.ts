@@ -181,6 +181,15 @@ export class BotsController {
     return this.service.revertFile(user.tenantId!, id, body.path, body.version);
   }
 
+  @Post(':id/broadcast')
+  broadcast(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: { message: string; audience?: 'all' | 'recent30' },
+  ) {
+    return this.service.broadcast(user.tenantId!, id, body.message, body.audience ?? 'all');
+  }
+
   @Post(':id/command')
   command(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { command: string }) {
     return this.service.sendCommand(user.tenantId!, id, body.command ?? '');

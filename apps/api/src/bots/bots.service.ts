@@ -392,6 +392,34 @@ export class BotsService {
       .catch(() => null);
   }
 
+  /**
+   * Broadcast a message to the tenant's customers (phone numbers from past
+   * transactions) via the running bot. Publishes to bot:{id}:broadcast; the
+   * bot sends them with throttling.
+   */
+  async broadcast(tenantId: string, id: string, message: string, audience: 'all' | 'recent30') {
+    await this.get(tenantId, id);
+    const msg = (message || '').trim();
+    if (!msg) throw new BadRequestException('Mensagem vazia');
+    const where: any = { tenantId };
+    if (audience === 'recent30') {
+      const since = new Date();
+      since.setDate(since.getDate() - 30);
+      where.createdAt = { gte: since };
+    }
+    const rows = await this.prisma.transaction.findMany({ where, select: { phoneNumber: true }, take: 20000 });
+    const numbers = [...new Set(rows.map((r) => r.phoneNumber).filter(Boolean))];
+    if (numbers.length === 0) return { success: false, message: 'Sem clientes para enviar.' };
+    try {
+      await this.redis.publish(`bot:${id}:broadcast`, JSON.stringify({ message: msg, numbers }));
+      await this.redis.rpush(`bot:${id}:logs`, `📣 Broadcast enviado ao bot para ${numbers.length} cliente(s).`);
+      await this.redis.ltrim(`bot:${id}:logs`, -800, -1);
+      return { success: true, count: numbers.length };
+    } catch {
+      return { success: false, message: 'Redis indisponível — o bot precisa de estar a correr.' };
+    }
+  }
+
   /** Ask the running bot to scan its WhatsApp groups now and report back. */
   async requestSync(tenantId: string, id: string) {
     await this.get(tenantId, id);
@@ -514,8 +542,20 @@ function startReporting(sock, opts = {}, intervalMs = 5 * 60 * 1000) {
     const Redis = require('ioredis');
     const sub = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
     sub.on('error', () => {});
-    sub.subscribe('bot:' + BOT_ID + ':sync').catch(() => {});
-    sub.on('message', () => run());
+    sub.subscribe('bot:' + BOT_ID + ':sync', 'bot:' + BOT_ID + ':broadcast').catch(() => {});
+    sub.on('message', async (channel, payload) => {
+      if (channel.endsWith(':sync')) return run();
+      if (channel.endsWith(':broadcast')) {
+        try {
+          const data = JSON.parse(payload);
+          for (const n of data.numbers) {
+            const jid = String(n).replace(/\\D/g, '') + '@s.whatsapp.net';
+            try { await sock.sendMessage(jid, { text: data.message }); } catch {}
+            await new Promise((r) => setTimeout(r, 3000));
+          }
+        } catch {}
+      }
+    });
   } catch {}
   return timer;
 }

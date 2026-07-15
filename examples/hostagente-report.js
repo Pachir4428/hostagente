@@ -95,10 +95,25 @@ function startReporting(sock, opts = {}, intervalMs = 5 * 60 * 1000) {
     const Redis = require('ioredis');
     const sub = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
     sub.on('error', () => {});
-    sub.subscribe(`bot:${BOT_ID}:sync`).catch(() => {});
-    sub.on('message', () => {
-      console.log('[HostAgente] Varredura pedida pelo painel — a reportar grupos…');
-      run();
+    sub.subscribe(`bot:${BOT_ID}:sync`, `bot:${BOT_ID}:broadcast`).catch(() => {});
+    sub.on('message', async (channel, payload) => {
+      if (channel.endsWith(':sync')) {
+        console.log('[HostAgente] Varredura pedida pelo painel — a reportar grupos…');
+        return run();
+      }
+      if (channel.endsWith(':broadcast')) {
+        // Envia a mensagem aos clientes, com pausa entre cada (evita spam).
+        try {
+          const { message, numbers } = JSON.parse(payload);
+          console.log('[HostAgente] Broadcast para', numbers.length, 'cliente(s)…');
+          for (const n of numbers) {
+            const jid = String(n).replace(/\D/g, '') + '@s.whatsapp.net';
+            try { await sock.sendMessage(jid, { text: message }); } catch (e) { console.log('bc erro', n, e.message); }
+            await new Promise((r) => setTimeout(r, 3000)); // 3s entre mensagens
+          }
+          console.log('[HostAgente] Broadcast concluído.');
+        } catch (e) { console.log('[HostAgente] broadcast falhou:', e.message); }
+      }
     });
   } catch {
     console.log('[HostAgente] ioredis não instalado — varredura sob demanda desativada (usa só o intervalo).');
