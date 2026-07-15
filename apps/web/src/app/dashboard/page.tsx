@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/useAuth';
 import { AppShell } from '@/components/AppShell';
 import { TENANT_NAV } from '@/lib/nav';
 import { OnboardingChecklist } from '@/components/OnboardingChecklist';
+import { WelcomeTour } from '@/components/WelcomeTour';
 import { mzn, dateTime, TX_STATUS, OPERATOR_LABEL } from '@/lib/format';
 
 interface Summary {
@@ -50,6 +51,7 @@ export default function TenantDashboard() {
       email={user?.email}
       badge={data?.plan ? `◈ Plano ${data.plan}` : undefined}
     >
+      <WelcomeTour />
       {loading || loadingData ? (
         <div className="flex justify-center py-20">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-teal" />

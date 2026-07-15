@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { authApi } from '@/lib/api';
 
 type Kind = 'comando' | 'nano' | 'menu' | 'autoreply';
 
@@ -59,7 +60,7 @@ module.exports = {
 `;
 }
 
-export function CodeGenerator({ gated = false, freeUses = 2 }: { gated?: boolean; freeUses?: number }) {
+export function CodeGenerator({ gated = false, freeUses = 2, canSave = false }: { gated?: boolean; freeUses?: number; canSave?: boolean }) {
   const [kind, setKind] = useState<Kind>('comando');
   const [trigger, setTrigger] = useState('saldo');
   const [response, setResponse] = useState('Envia o comprovante para confirmar o teu saldo. 💳');
@@ -67,6 +68,30 @@ export function CodeGenerator({ gated = false, freeUses = 2 }: { gated?: boolean
   const [output, setOutput] = useState('');
   const [locked, setLocked] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [bots, setBots] = useState<{ id: string; name: string }[]>([]);
+  const [saveBot, setSaveBot] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (canSave) authApi.get('/bots').then((r) => setBots((r.data || []).filter((b: any) => b.type === 'manual'))).catch(() => {});
+  }, [canSave]);
+
+  async function saveToBot() {
+    if (!saveBot || !output) return;
+    const ext = KINDS.find((k) => k.id === kind)?.ext || 'js';
+    const folder = ext === 'json' ? 'storage/nanos' : 'src/comandos';
+    const name = (trigger || 'codigo').trim().replace(/[^\w.-]/g, '_');
+    const path = `${folder}/${name}.${ext}`;
+    setSaving(true);
+    try {
+      await authApi.post(`/bots/${saveBot}/file`, { path, content: output });
+      alert(`Guardado em ${path}. Reinicia o bot para carregar.`);
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Não foi possível guardar');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function generate() {
     if (gated) {
@@ -155,6 +180,18 @@ export function CodeGenerator({ gated = false, freeUses = 2 }: { gated?: boolean
               </div>
             </div>
             <pre className="flex-1 overflow-auto rounded-lg bg-[#0b0f14] p-3 font-mono text-[12px] leading-relaxed text-[#c9d1d9]">{output}</pre>
+            {canSave && bots.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+                <span className="text-xs text-muted">Guardar num bot:</span>
+                <select value={saveBot} onChange={(e) => setSaveBot(e.target.value)} className="field !py-1.5 text-sm">
+                  <option value="">Escolhe…</option>
+                  {bots.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+                <button onClick={saveToBot} disabled={!saveBot || saving} className="btn-primary !px-3 !py-1.5 text-xs">
+                  {saving ? 'A guardar…' : 'Guardar'}
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center py-8 text-center text-sm text-muted">

@@ -12,7 +12,7 @@ export default function GeradorPage() {
       <p className="mb-6 max-w-2xl text-sm text-muted">
         Cria comandos Baileys e nanos para os teus bots. Gera, copia (ou descarrega) e cola no gestor de ficheiros do bot (ex: <span className="font-mono">src/comandos/</span>), depois reinicia o bot.
       </p>
-      <CodeGenerator />
+      <CodeGenerator canSave />
     </AppShell>
   );
 }
