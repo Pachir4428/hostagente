@@ -9,6 +9,7 @@ import { getToken } from '@/lib/auth';
 import { useAuth } from '@/lib/useAuth';
 import { AppShell } from '@/components/AppShell';
 import { CodeEditor } from '@/components/CodeEditor';
+import { QrCode } from '@/components/QrCode';
 import { TENANT_NAV } from '@/lib/nav';
 
 interface Bot {
@@ -73,6 +74,8 @@ export default function BotConsolePage() {
   const [bot, setBot] = useState<Bot | null>(null);
   const [status, setStatus] = useState('stopped');
   const [stats, setStats] = useState<{ uptimeMs: number; restarts: number; lastActivity: number; running: boolean } | null>(null);
+  const [qr, setQr] = useState<string | null>(null);
+  const [pairing, setPairing] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [busy, setBusy] = useState('');
   const [cmd, setCmd] = useState('');
@@ -158,6 +161,8 @@ export default function BotConsolePage() {
       setLogs(res.data.logs || []);
       setStats(res.data.stats || null);
       setGroups(res.data.groups || []);
+      setQr(res.data.qr || null);
+      setPairing(res.data.pairing || null);
     } catch {
       /* ignore */
     }
@@ -189,6 +194,7 @@ export default function BotConsolePage() {
           setLogs((prev) => [...prev.slice(-799), evt.line]);
         } else if (evt?.type === 'status') {
           setStatus(evt.status);
+          if (evt.status === 'connected') setQr(null);
         } else if (evt?.type === 'stats') {
           setStats(evt.stats);
         }
@@ -687,6 +693,43 @@ export PAINEL_BOT_ID=${id}`}</pre>
           <p className="mt-2 text-xs text-muted">
             A API key é a mesma de <Link href="/dashboard/account" className="text-teal hover:underline">Conta &amp; API</Link>. Endpoints do bot: <span className="font-mono">/bot-api/products</span>, <span className="font-mono">/bot-api/bots/{'{id}'}/groups</span>, <span className="font-mono">/bot-api/bots/{'{id}'}/info</span>.
           </p>
+        </div>
+
+        {/* Ligação ao WhatsApp: QR / estado */}
+        <div className="card mb-5 p-4">
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
+            {status === 'connected' ? (
+              <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-teal/10 text-2xl text-teal"><i className="fa-brands fa-whatsapp" /></div>
+            ) : qr ? (
+              <QrCode value={qr} size={200} />
+            ) : (
+              <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-hover text-2xl text-muted2"><i className="fa-brands fa-whatsapp" /></div>
+            )}
+            <div className="min-w-0 text-center sm:text-left">
+              {status === 'connected' ? (
+                <>
+                  <p className="font-display font-semibold text-teal"><i className="fa-solid fa-circle-check mr-1" />Ligado ao WhatsApp</p>
+                  <p className="text-sm text-muted">O bot está ligado e a operar.</p>
+                </>
+              ) : qr ? (
+                <>
+                  <p className="font-display font-semibold">Lê o QR code para ligar</p>
+                  <p className="mt-1 text-sm text-muted">No telemóvel: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar aparelho</b> → aponta a câmara ao código.</p>
+                </>
+              ) : pairing ? (
+                <>
+                  <p className="font-display font-semibold">Código de emparelhamento</p>
+                  <p className="mt-1 font-mono text-2xl font-bold tracking-widest text-teal">{pairing}</p>
+                  <p className="text-sm text-muted">WhatsApp → Aparelhos conectados → Conectar com número de telefone → introduz este código.</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-display font-semibold">{running ? 'À espera do QR…' : 'Bot parado'}</p>
+                  <p className="mt-1 text-sm text-muted">{running ? 'Aguarda uns segundos pelo código de ligação.' : 'Clica em Iniciar. O QR aparece aqui quando o bot arrancar.'}</p>
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[300px_1fr]">

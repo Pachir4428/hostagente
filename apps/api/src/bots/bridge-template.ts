@@ -11,6 +11,7 @@ const PACKAGE_JSON = JSON.stringify(
     dependencies: {
       '@whiskeysockets/baileys': '^6.7.0',
       axios: '^1.6.5',
+      ioredis: '^5.3.2',
       pino: '^8.17.2',
       'qrcode-terminal': '^0.12.0',
     },
@@ -45,6 +46,8 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
 
 const API_KEY = process.env.PAINEL_API_KEY || process.env.HOSTAGENTE_KEY || process.env.API_KEY || '';
 const PANEL_URL = process.env.PAINEL_API_URL || process.env.HOSTAGENTE_URL || 'http://api:3000';
+const BID = process.env.BOT_ID || process.env.PAINEL_BOT_ID || '';
+let rq; try { const R = require('ioredis'); rq = new R(process.env.REDIS_URL || 'redis://redis:6379'); rq.on('error', () => {}); } catch { rq = { set: () => Promise.resolve(), del: () => Promise.resolve() }; }
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const PROCESSED_PATH = path.join(__dirname, 'processed.json');
 
@@ -102,8 +105,8 @@ async function start() {
   sock.ev.on('creds.update', saveCreds);
   sock.ev.on('connection.update', (u) => {
     const { connection, lastDisconnect, qr } = u;
-    if (qr) { console.log('\nEscaneia este QR no WhatsApp (Aparelhos conectados):\n'); qrcode.generate(qr, { small: true }); }
-    if (connection === 'open') console.log('✅ Ponte ligada. À espera de comprovantes…');
+    if (qr) { console.log('\nEscaneia este QR no WhatsApp (Aparelhos conectados):\n'); qrcode.generate(qr, { small: true }); if (BID) rq.set('bot:' + BID + ':qr', qr, 'EX', 90).catch(() => {}); }
+    if (connection === 'open') { console.log('✅ Ponte ligada. À espera de comprovantes…'); if (BID) rq.del('bot:' + BID + ':qr').catch(() => {}); }
     if (connection === 'close') { const reconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut; if (reconnect) setTimeout(start, 3000); }
   });
   sock.ev.on('messages.upsert', async ({ messages, type }) => {

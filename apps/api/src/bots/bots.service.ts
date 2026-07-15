@@ -465,6 +465,10 @@ export class BotsService {
 } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const { startReporting } = require('./hostagente-report');
+const _Redis = require('ioredis');
+const _rq = new _Redis(process.env.REDIS_URL || 'redis://redis:6379');
+_rq.on('error', () => {});
+const _BID = process.env.BOT_ID || process.env.PAINEL_BOT_ID || '';
 
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState('auth');
@@ -473,9 +477,14 @@ async function start() {
   sock.ev.on('creds.update', saveCreds);
   sock.ev.on('connection.update', (u) => {
     const { connection, lastDisconnect, qr } = u;
-    if (qr) qrcode.generate(qr, { small: true });
+    if (qr) {
+      qrcode.generate(qr, { small: true });
+      // Publica o QR para o painel o mostrar como imagem.
+      if (_BID) _rq.set('bot:' + _BID + ':qr', qr, 'EX', 90).catch(() => {});
+    }
     if (connection === 'open') {
       console.log('✅ Ligado ao WhatsApp!');
+      if (_BID) _rq.del('bot:' + _BID + ':qr').catch(() => {});
       // Reporta os grupos ao painel HostAgente (usa as env do container).
       startReporting(sock, {});
     }
