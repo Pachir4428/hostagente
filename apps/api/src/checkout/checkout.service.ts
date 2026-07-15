@@ -31,7 +31,18 @@ export class CheckoutService {
     return { plans, gateways: enabled };
   }
 
-  async create(tenantId: string, planId: string, gateway: GatewayId) {
+  /** Validate a coupon code (active + not expired) and return its discount. */
+  async validateCoupon(code: string) {
+    if (!code?.trim()) return { valid: false };
+    const coupon = await this.prisma.coupon.findFirst({ where: { code: code.trim().toUpperCase(), active: true } });
+    if (!coupon) return { valid: false, message: 'Cupão inválido' };
+    if (coupon.expiresAt && new Date(coupon.expiresAt).getTime() < Date.now()) {
+      return { valid: false, message: 'Cupão expirado' };
+    }
+    return { valid: true, code: coupon.code, discountPct: coupon.discountPct };
+  }
+
+  async create(tenantId: string, planId: string, gateway: GatewayId, couponCode?: string) {
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) throw new BadRequestException('Plano inválido');
 
@@ -41,24 +52,40 @@ export class CheckoutService {
       throw new BadRequestException('Método de pagamento indisponível.');
     }
 
+    // Apply coupon discount if valid.
+    let amount = plan.priceMonthly;
+    let discountPct = 0;
+    let appliedCoupon: string | null = null;
+    if (couponCode) {
+      const c = await this.validateCoupon(couponCode);
+      if (c.valid) {
+        discountPct = c.discountPct!;
+        appliedCoupon = c.code!;
+        amount = Math.max(0, Math.round(plan.priceMonthly * (1 - discountPct / 100)));
+      }
+    }
+
     const reference = `HA-${Date.now().toString(36).toUpperCase()}`;
     const invoice = await this.prisma.invoice.create({
-      data: { tenantId, amount: plan.priceMonthly, status: 'pending', gateway, reference, planId },
+      data: { tenantId, amount, status: 'pending', gateway, reference, planId },
     });
 
     let instructions = '';
     let requiresManual = false;
     if (gateway === 'mpesa' || gateway === 'emola') {
       requiresManual = true;
-      instructions = `Envia ${plan.priceMonthly} MZN para o número ${cfg.number || '(não configurado)'} via ${LABELS[gateway]}, usando a referência ${reference}. Depois clica em "Já paguei" para ativarmos o plano.`;
+      instructions = `Envia ${amount} MZN para o número ${cfg.number || '(não configurado)'} via ${LABELS[gateway]}, usando a referência ${reference}. Depois clica em "Já paguei" para ativarmos o plano.`;
     } else {
-      instructions = `Serás encaminhado para ${LABELS[gateway]} (${cfg.mode || 'sandbox'}) para concluir o pagamento de ${plan.priceMonthly} MZN.`;
+      instructions = `Serás encaminhado para ${LABELS[gateway]} (${cfg.mode || 'sandbox'}) para concluir o pagamento de ${amount} MZN.`;
     }
 
     return {
       invoiceId: invoice.id,
       reference,
-      amount: plan.priceMonthly,
+      amount,
+      originalAmount: plan.priceMonthly,
+      discountPct,
+      coupon: appliedCoupon,
       gateway,
       label: LABELS[gateway],
       requiresManual,

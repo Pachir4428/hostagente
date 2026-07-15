@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/roles.guard';
 import { Roles } from '../common/roles.decorator';
@@ -16,12 +16,17 @@ export class CheckoutController {
     return this.service.options(user.tenantId!);
   }
 
+  @Get('coupon')
+  coupon(@Query('code') code: string) {
+    return this.service.validateCoupon(code || '');
+  }
+
   @Post()
   create(
     @CurrentUser() user: AuthUser,
-    @Body() body: { planId: string; gateway: 'visa' | 'paypal' | 'mpesa' | 'emola' },
+    @Body() body: { planId: string; gateway: 'visa' | 'paypal' | 'mpesa' | 'emola'; coupon?: string },
   ) {
-    return this.service.create(user.tenantId!, body.planId, body.gateway);
+    return this.service.create(user.tenantId!, body.planId, body.gateway, body.coupon);
   }
 
   @Post(':invoiceId/confirm')

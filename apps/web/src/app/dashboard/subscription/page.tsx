@@ -73,6 +73,8 @@ export default function SubscriptionPage() {
   const [gateways, setGateways] = useState<Gateway[]>([]);
   const [order, setOrder] = useState<Order | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [coupon, setCoupon] = useState('');
+  const [couponInfo, setCouponInfo] = useState<{ valid: boolean; discountPct?: number; message?: string } | null>(null);
 
   async function load() {
     const [c, p, i] = await Promise.all([
@@ -120,11 +122,21 @@ export default function SubscriptionPage() {
     }
   }
 
+  async function applyCoupon() {
+    if (!coupon.trim()) return setCouponInfo(null);
+    try {
+      const res = await authApi.get('/checkout/coupon', { params: { code: coupon.trim() } });
+      setCouponInfo(res.data);
+    } catch {
+      setCouponInfo({ valid: false, message: 'Erro ao validar' });
+    }
+  }
+
   async function startPayment(gateway: Gateway['id']) {
     if (!checkoutPlan) return;
     setCheckoutBusy(true);
     try {
-      const res = await authApi.post('/checkout', { planId: checkoutPlan.id, gateway });
+      const res = await authApi.post('/checkout', { planId: checkoutPlan.id, gateway, coupon: couponInfo?.valid ? coupon.trim() : undefined });
       setOrder(res.data);
     } catch (e: any) {
       alert(e.response?.data?.message || 'Não foi possível iniciar o pagamento');
@@ -159,6 +171,8 @@ export default function SubscriptionPage() {
     setCheckoutPlan(null);
     setOrder(null);
     setGateways([]);
+    setCoupon('');
+    setCouponInfo(null);
   }
 
   async function downloadReceipt(invoiceId: string) {
@@ -306,6 +320,21 @@ export default function SubscriptionPage() {
 
             {!order ? (
               <div className="mt-5">
+                {/* Cupão */}
+                <div className="mb-4">
+                  <p className="mb-1.5 text-sm text-muted">Tens um cupão?</p>
+                  <div className="flex gap-2">
+                    <input value={coupon} onChange={(e) => { setCoupon(e.target.value.toUpperCase()); setCouponInfo(null); }} placeholder="CODIGO" className="field flex-1 font-mono text-sm uppercase" />
+                    <button onClick={applyCoupon} className="btn-ghost">Aplicar</button>
+                  </div>
+                  {couponInfo && (
+                    couponInfo.valid ? (
+                      <p className="mt-1.5 text-xs text-teal"><i className="fa-solid fa-check mr-1" />Cupão válido: -{couponInfo.discountPct}% → paga {mzn(Math.round(checkoutPlan.priceMonthly * (1 - (couponInfo.discountPct || 0) / 100)))}</p>
+                    ) : (
+                      <p className="mt-1.5 text-xs text-danger">{couponInfo.message || 'Cupão inválido'}</p>
+                    )
+                  )}
+                </div>
                 <p className="mb-3 text-sm text-muted">Escolhe o método de pagamento:</p>
                 {gateways.length === 0 ? (
                   <p className="rounded-xl border border-line bg-hover px-4 py-3 text-sm text-muted">
