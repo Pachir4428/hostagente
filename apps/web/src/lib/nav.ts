@@ -12,6 +12,7 @@ export const TENANT_NAV: NavItem[] = [
   { href: '/dashboard/notifications', label: 'Notificações', icon: 'fa-solid fa-bell' },
   { href: '/dashboard/team', label: 'Equipa', icon: 'fa-solid fa-users' },
   { href: '/dashboard/referrals', label: 'Convidar & Ganhar', icon: 'fa-solid fa-gift' },
+  { href: '/dashboard/ajuda', label: 'Ajuda & Guias', icon: 'fa-solid fa-circle-question' },
   { href: '/dashboard/support', label: 'Suporte', icon: 'fa-solid fa-headset' },
 ];
 
