@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -19,6 +19,14 @@ export default function RegisterPage() {
   const [accept, setAccept] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [ref, setRef] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const r = new URLSearchParams(window.location.search).get('ref');
+      if (r) setRef(r.toUpperCase());
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -32,7 +40,7 @@ export default function RegisterPage() {
       // The API accepts a single `name`; join first + last name.
       // `phone` is collected for later (payments) but not sent on register.
       const name = `${firstName} ${lastName}`.trim();
-      const res = await api.post('/auth/register', { email, password, name, businessName });
+      const res = await api.post('/auth/register', { email, password, name, businessName, ref: ref || undefined });
       setToken(res.data.accessToken);
       router.replace('/dashboard');
     } catch (err: any) {
@@ -82,6 +90,11 @@ export default function RegisterPage() {
           <p className="mt-2 text-muted">Começa grátis em menos de um minuto.</p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+            {ref && (
+              <div className="rounded-xl border border-teal/25 bg-teal/10 px-4 py-2.5 text-sm text-teal">
+                <i className="fa-solid fa-gift mr-1" />Foste convidado com o código <b>{ref}</b>.
+              </div>
+            )}
             {error && (
               <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
                 {error}

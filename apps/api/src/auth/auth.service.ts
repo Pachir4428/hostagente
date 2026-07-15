@@ -46,7 +46,7 @@ export class AuthService {
    * first TENANT_ADMIN user, starts a 14-day trial on the Starter plan, and
    * provisions a MacroDroid API key.
    */
-  async register(email: string, password: string, name: string, businessName?: string) {
+  async register(email: string, password: string, name: string, businessName?: string, ref?: string) {
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) throw new ConflictException('Este email já está registado');
 
@@ -55,11 +55,21 @@ export class AuthService {
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + 14);
 
+    // Resolve referrer from the invite code, and mint a code for the new tenant.
+    let referredById: string | null = null;
+    if (ref?.trim()) {
+      const referrer = await this.prisma.tenant.findUnique({ where: { referralCode: ref.trim().toUpperCase() } });
+      referredById = referrer?.id ?? null;
+    }
+    const referralCode = Math.random().toString(36).slice(2, 8).toUpperCase();
+
     const tenant = await this.prisma.tenant.create({
       data: {
         name: businessName?.trim() || name,
         status: 'trial',
         planId: starter?.id ?? null,
+        referralCode,
+        referredById,
         users: {
           create: { email, passwordHash, name, role: 'TENANT_ADMIN' },
         },

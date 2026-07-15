@@ -79,10 +79,14 @@ model Tenant {
   receivingNumber String?
   status          TenantStatus @default(trial)
   planId          String?
+  referralCode    String?      @unique // código de convite deste revendedor
+  referredById    String? // quem o convidou
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
   plan          Plan?          @relation(fields: [planId], references: [id])
+  referredBy    Tenant?        @relation("Referrals", fields: [referredById], references: [id])
+  referrals     Tenant[]       @relation("Referrals")
   users         User[]
   products      Product[]
   transactions  Transaction[]

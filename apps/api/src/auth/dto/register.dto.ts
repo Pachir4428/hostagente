@@ -15,4 +15,8 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   businessName?: string;
+
+  @IsOptional()
+  @IsString()
+  ref?: string;
 }
