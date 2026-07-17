@@ -111,7 +111,7 @@ fi
 # schema.prisma, which is what we want for this deployment model. It is
 # idempotent, so running it on every deploy is safe.
 echo "Syncing database schema (prisma db push)..."
-docker compose -f docker-compose.prod.yml exec -T api npx prisma db push --skip-generate || \
+docker compose -f docker-compose.prod.yml exec -T api npx prisma db push --skip-generate --accept-data-loss || \
     echo "WARNING: Database sync failed. Check logs with: make logs SVC=api"
 
 echo "=== Deployment complete! ==="

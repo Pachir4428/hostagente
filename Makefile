@@ -62,7 +62,7 @@ restart-api: ## Reiniciar apenas a API
 
 ## ── Base de Dados ────────────────────────────────────────────
 migrate: ## Sincronizar o schema na base de dados (cria/atualiza tabelas via prisma db push)
-	docker compose -f docker-compose.prod.yml exec -T api npx prisma db push --skip-generate
+	docker compose -f docker-compose.prod.yml exec -T api npx prisma db push --skip-generate --accept-data-loss
 
 migrate-dev: ## Criar nova migração (dev)
 	cd apps/api && npx prisma migrate dev

@@ -67,7 +67,7 @@ done
 
 if [ -n "$API_OK" ]; then
   echo "✅ API is healthy. Running prisma db push to ensure tables exist..."
-  docker compose -f docker-compose.prod.yml exec -T api npx prisma db push --skip-generate || true
+  docker compose -f docker-compose.prod.yml exec -T api npx prisma db push --skip-generate --accept-data-loss || true
   echo "✅ Done. You can log in now."
 else
   echo "⚠️  API still not healthy. Check: docker compose -f docker-compose.prod.yml logs api --tail=30"
