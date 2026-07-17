@@ -3,9 +3,9 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 
 const PLANS = [
-  { name: 'Starter', priceMonthly: 0, maxTransactions: 200, maxUsers: 1, features: ['1 SIM', 'Deteção automática', 'Suporte comunitário'] },
-  { name: 'Pro', priceMonthly: 750, maxTransactions: 5000, maxUsers: 3, features: ['SIMs ilimitados', 'Exportação CSV/PDF', 'Suporte prioritário'] },
-  { name: 'Business', priceMonthly: 2500, maxTransactions: 50000, maxUsers: 10, features: ['Tudo do Pro', 'Equipa & permissões', 'API dedicada'] },
+  { name: 'Starter', priceMonthly: 0, maxTransactions: 200, maxUsers: 1, maxBots: 1, features: ['1 SIM', 'Deteção automática', 'Suporte comunitário'] },
+  { name: 'Pro', priceMonthly: 750, maxTransactions: 5000, maxUsers: 3, maxBots: 5, features: ['SIMs ilimitados', 'Exportação CSV/PDF', 'Suporte prioritário'] },
+  { name: 'Business', priceMonthly: 2500, maxTransactions: 50000, maxUsers: 10, maxBots: 50, features: ['Tudo do Pro', 'Equipa & permissões', 'API dedicada'] },
 ];
 
 @Injectable()
@@ -32,6 +32,7 @@ export class SeedService implements OnModuleInit {
           priceMonthly: p.priceMonthly,
           maxTransactions: p.maxTransactions,
           maxUsers: p.maxUsers,
+          maxBots: p.maxBots,
           features: p.features,
         },
         create: p,
