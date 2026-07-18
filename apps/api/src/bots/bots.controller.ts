@@ -46,6 +46,20 @@ export class BotsController {
     return this.service.groupSubscriptions(user.tenantId!);
   }
 
+  // ── Bot creator ──
+  @Post('ai-generate')
+  aiGenerate(@CurrentUser() user: AuthUser, @Body() body: { prompt: string }) {
+    return this.service.aiGenerate(user.tenantId!, body?.prompt || '');
+  }
+
+  @Post('scaffold')
+  scaffold(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { name: string; base?: 'modelo' | 'ponte' | 'vazio'; extraFiles?: { name: string; content: string }[] },
+  ) {
+    return this.service.scaffold(user.tenantId!, body);
+  }
+
   @Get('template/download')
   downloadTemplate(@Res() res: Response) {
     return this.service.downloadTemplate(res);

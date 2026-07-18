@@ -7,6 +7,7 @@ import Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailService } from '../mail/mail.service';
+import { SettingsService } from '../settings/settings.service';
 
 const RUNNER_URL = process.env.RUNNER_INTERNAL_URL || 'http://bot-runner:4001';
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || '';
@@ -24,8 +25,120 @@ export class BotsService {
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private mail: MailService,
+    private settings: SettingsService,
   ) {
     this.redis.on('error', () => {}); // don't crash on redis blips
+  }
+
+  /** Resolve the tenant's effective plan (subscription plan, else tenant plan). */
+  private async tenantPlan(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: { subscription: { include: { plan: true } }, plan: true },
+    });
+    return tenant?.subscription?.plan ?? tenant?.plan ?? null;
+  }
+
+  /** Feature gate: AI bot creation is available on paid plans. */
+  private async assertAiAllowed(tenantId: string) {
+    const plan = await this.tenantPlan(tenantId);
+    if (!plan || plan.priceMonthly <= 0) {
+      throw new BadRequestException(
+        'O criador por IA está disponível nos planos pagos (Pro/Business). Faz upgrade em Assinatura.',
+      );
+    }
+    return plan;
+  }
+
+  /** Call the configured AI (Anthropic/OpenAI) with a system + user prompt. */
+  private async callAI(system: string, user: string): Promise<string> {
+    const cfg = await this.settings.getAssistant();
+    if (!cfg.enabled || !cfg.apiKey) return '';
+    try {
+      if (cfg.provider === 'openai') {
+        const res = await axios.post(
+          'https://api.openai.com/v1/chat/completions',
+          { model: cfg.model || 'gpt-4o-mini', max_tokens: 1500, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },
+          { headers: { Authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' }, timeout: 40000 },
+        );
+        return res.data?.choices?.[0]?.message?.content || '';
+      }
+      const res = await axios.post(
+        'https://api.anthropic.com/v1/messages',
+        { model: cfg.model || 'claude-haiku-4-5-20251001', max_tokens: 1500, system, messages: [{ role: 'user', content: user }] },
+        { headers: { 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, timeout: 40000 },
+      );
+      return res.data?.content?.[0]?.text || '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Generate command files for a bot from a natural-language description.
+   * Uses the configured AI; falls back to a keyword-based template if no AI.
+   */
+  async aiGenerate(tenantId: string, prompt: string) {
+    await this.assertAiAllowed(tenantId);
+    const p = (prompt || '').trim();
+    if (!p) throw new BadRequestException('Descreve o que o bot deve fazer.');
+
+    const system =
+      'És um gerador de comandos para bots de WhatsApp (Baileys). Responde APENAS com JSON válido: ' +
+      'um array de comandos no formato [{"name":"saldo","trigger":"!saldo","response":"texto da resposta"}]. ' +
+      'Máximo 6 comandos, respostas curtas em português. Sem texto fora do JSON.';
+    const raw = await this.callAI(system, p);
+
+    let commands: { name: string; trigger: string; response: string }[] = [];
+    try {
+      const match = raw.match(/\[[\s\S]*\]/);
+      if (match) commands = JSON.parse(match[0]);
+    } catch {
+      commands = [];
+    }
+    if (!Array.isArray(commands) || commands.length === 0) {
+      // Fallback sem IA: um comando de boas-vindas a partir da descrição.
+      commands = [{ name: 'menu', trigger: '!menu', response: `Olá! ${p.slice(0, 120)}` }];
+    }
+
+    const files = commands.slice(0, 6).map((c) => {
+      const name = String(c.name || 'comando').replace(/[^\w-]/g, '_').toLowerCase();
+      const trig = String(c.trigger || `!${name}`).replace(/^!*/, '');
+      const resp = String(c.response || 'Olá!').replace(/`/g, '\\`');
+      return {
+        name: `src/comandos/${name}.js`,
+        content: `// Comando: !${trig}\nmodule.exports = {\n  name: '${trig}',\n  async execute(sock, msg) {\n    await sock.sendMessage(msg.key.remoteJid, { text: \`${resp}\` });\n  },\n};\n`,
+      };
+    });
+    return { files, source: raw ? 'ai' : 'fallback', count: files.length };
+  }
+
+  /** Create a bot from a base template + extra files (bot creator). */
+  async scaffold(
+    tenantId: string,
+    data: { name: string; base?: 'modelo' | 'ponte' | 'vazio'; extraFiles?: { name: string; content: string }[] },
+  ) {
+    const bot = await this.create(tenantId, { name: data.name || 'Novo bot', type: 'manual' });
+    // Base template files.
+    let baseFiles: { name: string; content: string }[] = [];
+    if (data.base === 'ponte') {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      baseFiles = require('./bridge-template').bridgeTemplateFiles();
+    } else if (data.base === 'vazio') {
+      baseFiles = [
+        { name: 'package.json', content: JSON.stringify({ name: 'bot', main: 'index.js', scripts: { start: 'node index.js' }, dependencies: { '@whiskeysockets/baileys': '^6.7.0', 'qrcode-terminal': '^0.12.0' } }, null, 2) },
+        { name: 'index.js', content: `const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');\nconst qrcode = require('qrcode-terminal');\nasync function start(){const {state,saveCreds}=await useMultiFileAuthState('auth');const sock=makeWASocket({auth:state});sock.ev.on('creds.update',saveCreds);sock.ev.on('connection.update',u=>{if(u.qr)qrcode.generate(u.qr,{small:true});});}\nstart();\n` },
+      ];
+    } else {
+      baseFiles = this.templateFiles();
+    }
+    const all = [...baseFiles, ...(data.extraFiles || [])].filter((f) => f?.name);
+    await this.saveFiles(
+      tenantId,
+      bot.id,
+      all.map((f) => ({ rel: f.name, buffer: Buffer.from(f.content ?? '', 'utf8') })),
+    );
+    return bot;
   }
 
   /** The tenant's active API key, injected into the bot container so it can report back. */
