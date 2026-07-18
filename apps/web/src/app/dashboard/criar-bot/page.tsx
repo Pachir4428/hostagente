@@ -37,6 +37,8 @@ export default function CriarBotPage() {
   // Comum
   const [name, setName] = useState('');
   const [base, setBase] = useState<Base>('modelo');
+  const [conn, setConn] = useState<'qr' | 'code'>('qr');
+  const [phone, setPhone] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
@@ -69,12 +71,18 @@ export default function CriarBotPage() {
       setError('Dá um nome ao bot.');
       return;
     }
+    const digits = phone.replace(/\D/g, '');
+    if (conn === 'code' && digits.length < 9) {
+      setError('Para ligar por código, indica o número com indicativo (ex: 258841234567).');
+      return;
+    }
     setError('');
     setCreating(true);
     try {
       const res = await authApi.post('/bots/scaffold', {
         name: name.trim(),
         base,
+        phoneNumber: conn === 'code' ? digits : undefined,
         extraFiles,
       });
       router.push(`/dashboard/bots/${res.data.id}`);
@@ -222,6 +230,41 @@ export default function CriarBotPage() {
             <div className="mt-4">
               <label className="mb-1.5 block text-sm text-muted">Nome do bot</label>
               <input value={name} onChange={(e) => setName(e.target.value)} className="field" placeholder="Ex: Atendimento" />
+            </div>
+
+            {/* Método de ligação ao WhatsApp */}
+            <div className="mt-4">
+              <label className="mb-1.5 block text-sm text-muted">Ligar ao WhatsApp por</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConn('qr')}
+                  className={`flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition ${conn === 'qr' ? 'border-teal/40 bg-teal/10 text-teal' : 'border-line text-muted hover:text-ink'}`}
+                >
+                  <i className="fa-solid fa-qrcode" /> QR code
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConn('code')}
+                  className={`flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition ${conn === 'code' ? 'border-teal/40 bg-teal/10 text-teal' : 'border-line text-muted hover:text-ink'}`}
+                >
+                  <i className="fa-solid fa-keyboard" /> Código
+                </button>
+              </div>
+              {conn === 'code' && (
+                <div className="mt-3">
+                  <input
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="field"
+                    placeholder="Número com indicativo — ex: 258841234567"
+                    inputMode="numeric"
+                  />
+                  <p className="mt-1.5 text-xs text-muted">
+                    Vais receber um código de 8 dígitos. No telemóvel: WhatsApp → Aparelhos conectados → <b>Conectar com número de telefone</b>.
+                  </p>
+                </div>
+              )}
             </div>
 
             {tab === 'manual' && (

@@ -17,6 +17,7 @@ interface Bot {
   name: string;
   type: 'auto' | 'manual';
   status: string;
+  phoneNumber?: string | null;
   hasScript: boolean;
   config?: { startCommand?: string; workdir?: string } | null;
 }
@@ -76,6 +77,8 @@ export default function BotConsolePage() {
   const [stats, setStats] = useState<{ uptimeMs: number; restarts: number; lastActivity: number; running: boolean } | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [pairing, setPairing] = useState<string | null>(null);
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [codePhone, setCodePhone] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
   const [busy, setBusy] = useState('');
   const [cmd, setCmd] = useState('');
@@ -256,6 +259,28 @@ export default function BotConsolePage() {
       setTimeout(loadFiles, 1500);
     } catch (e: any) {
       alert(e.response?.data?.message || 'Erro ao controlar o bot');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  // Ligar por código de emparelhamento: grava o número e reinicia o bot.
+  async function connectByCode() {
+    const digits = codePhone.replace(/\D/g, '');
+    if (digits.length < 9) {
+      alert('Indica o número com indicativo — ex: 258841234567');
+      return;
+    }
+    setBusy('code');
+    try {
+      await authApi.patch(`/bots/${id}`, { phoneNumber: digits });
+      const res = await authApi.post(`/bots/${id}/restart`);
+      if (res.data?.success === false) alert(res.data.message || 'Falhou');
+      setCodeOpen(false);
+      await loadBot();
+      await loadLive();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Erro ao ligar por código');
     } finally {
       setBusy('');
     }
@@ -730,6 +755,39 @@ export PAINEL_BOT_ID=${id}`}</pre>
               )}
             </div>
           </div>
+
+          {/* Ligar por código de emparelhamento (alternativa ao QR) */}
+          {status !== 'connected' && (
+            <div className="mt-3 border-t border-line pt-3">
+              {!codeOpen ? (
+                <button
+                  onClick={() => { setCodePhone(bot?.phoneNumber || ''); setCodeOpen(true); }}
+                  className="text-sm text-teal hover:underline"
+                >
+                  <i className="fa-solid fa-keyboard mr-1.5" />Ligar por código (sem QR)
+                </button>
+              ) : (
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    value={codePhone}
+                    onChange={(e) => setCodePhone(e.target.value)}
+                    className="field sm:max-w-xs"
+                    placeholder="Número com indicativo — ex: 258841234567"
+                    inputMode="numeric"
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={connectByCode} disabled={busy === 'code'} className="btn-primary">
+                      {busy === 'code' ? 'A ligar…' : 'Obter código'}
+                    </button>
+                    <button onClick={() => setCodeOpen(false)} className="btn-ghost">Cancelar</button>
+                  </div>
+                </div>
+              )}
+              <p className="mt-1.5 text-xs text-muted">
+                Recebes um código de 8 dígitos. No telemóvel: WhatsApp → Aparelhos conectados → <b>Conectar com número de telefone</b>.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[300px_1fr]">

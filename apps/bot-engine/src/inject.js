@@ -46,12 +46,35 @@ try {
       }
     }
 
+    // Número para ligação por código de emparelhamento (opcional).
+    const PAIR_PHONE = (process.env.PHONE || process.env.PAIR_PHONE || '').replace(/\D/g, '');
+
     function attach(sock) {
+      let pairAsked = false;
       // QR + ligação
-      sock.ev.on('connection.update', (u) => {
-        if (u.qr) rq.set('bot:' + BOT_ID + ':qr', u.qr, 'EX', 90).catch(() => {});
+      sock.ev.on('connection.update', async (u) => {
+        if (u.qr) {
+          if (PAIR_PHONE && typeof sock.requestPairingCode === 'function') {
+            // Ligação por código: pede o código uma vez e publica-o (sem QR).
+            if (!pairAsked) {
+              pairAsked = true;
+              try {
+                const code = await sock.requestPairingCode(PAIR_PHONE);
+                const pretty = String(code).match(/.{1,4}/g)?.join('-') || code;
+                await rq.set('bot:' + BOT_ID + ':pairing', pretty, 'EX', 120).catch(() => {});
+                logLine('🔑 Código de emparelhamento: ' + pretty);
+              } catch (e) {
+                // Se falhar o código, cai para o QR normal.
+                pairAsked = false;
+                rq.set('bot:' + BOT_ID + ':qr', u.qr, 'EX', 90).catch(() => {});
+              }
+            }
+          } else {
+            rq.set('bot:' + BOT_ID + ':qr', u.qr, 'EX', 90).catch(() => {});
+          }
+        }
         if (u.connection === 'open') {
-          rq.del('bot:' + BOT_ID + ':qr').catch(() => {});
+          rq.del('bot:' + BOT_ID + ':qr', 'bot:' + BOT_ID + ':pairing').catch(() => {});
           logLine('✅ WhatsApp ligado — a sincronizar grupos…');
           setTimeout(() => reportGroups(sock), 4000);
         }

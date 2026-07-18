@@ -116,9 +116,13 @@ export class BotsService {
   /** Create a bot from a base template + extra files (bot creator). */
   async scaffold(
     tenantId: string,
-    data: { name: string; base?: 'modelo' | 'ponte' | 'vazio'; extraFiles?: { name: string; content: string }[] },
+    data: { name: string; base?: 'modelo' | 'ponte' | 'vazio'; phoneNumber?: string; extraFiles?: { name: string; content: string }[] },
   ) {
-    const bot = await this.create(tenantId, { name: data.name || 'Novo bot', type: 'manual' });
+    const bot = await this.create(tenantId, {
+      name: data.name || 'Novo bot',
+      type: 'manual',
+      phoneNumber: data.phoneNumber || undefined,
+    });
     // Base template files.
     let baseFiles: { name: string; content: string }[] = [];
     if (data.base === 'ponte') {

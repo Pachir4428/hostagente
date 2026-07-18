@@ -55,7 +55,7 @@ export class BotsController {
   @Post('scaffold')
   scaffold(
     @CurrentUser() user: AuthUser,
-    @Body() body: { name: string; base?: 'modelo' | 'ponte' | 'vazio'; extraFiles?: { name: string; content: string }[] },
+    @Body() body: { name: string; base?: 'modelo' | 'ponte' | 'vazio'; phoneNumber?: string; extraFiles?: { name: string; content: string }[] },
   ) {
     return this.service.scaffold(user.tenantId!, body);
   }
