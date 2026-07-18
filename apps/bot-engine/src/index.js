@@ -278,8 +278,28 @@ async function boot() {
   }
   if (workdir !== DIR) log(`📁 Projeto encontrado em: ${path.relative(DIR, workdir)}`);
 
+  startShell(); // terminal persistente estilo Termux
   await installDeps();
   await startProject(cfg.startCommand);
+}
+
+// ── Terminal persistente (estilo Termux) ──
+// Uma shell bash de longa duração cujo estado (cd, export, etc.) persiste entre
+// comandos — tal como o Termux do Android. Os comandos do painel são escritos
+// no stdin desta shell.
+let shell = null;
+function startShell() {
+  try {
+    shell = spawn('bash', ['-i'], { cwd: workdir, env: { ...process.env, PS1: '' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  } catch {
+    shell = spawn('sh', [], { cwd: workdir, stdio: ['pipe', 'pipe', 'pipe'] });
+  }
+  streamLines(shell.stdout);
+  streamLines(shell.stderr);
+  shell.on('exit', () => {
+    shell = null;
+    if (!stopping) setTimeout(startShell, 1000); // reabre a sessão se fechar
+  });
 }
 
 // Operator commands + stdin, via Redis pub/sub.
@@ -291,10 +311,16 @@ redisSub.on('message', (channel, message) => {
     let cmd = String(message).trim();
     if (/^[\w./-]+\.(js|mjs|cjs)$/.test(cmd)) cmd = `node ${cmd}`;
     log(`\n$ ${cmd}`);
-    const c = run(cmd, {});
-    c.on('exit', (code) => log(`(exit ${code})`));
-  } else if (channel === K.stdin && child && child.stdin.writable) {
-    child.stdin.write(message + '\n');
+    if (shell && shell.stdin.writable) {
+      shell.stdin.write(cmd + '\n'); // sessão persistente (cd/export mantêm-se)
+    } else {
+      const c = run(cmd, {});
+      c.on('exit', (code) => log(`(exit ${code})`));
+    }
+  } else if (channel === K.stdin) {
+    // Enviado ao processo do bot se estiver a correr; senão à shell (input interativo).
+    if (child && child.stdin.writable) child.stdin.write(message + '\n');
+    else if (shell && shell.stdin.writable) shell.stdin.write(message + '\n');
   }
 });
 
@@ -310,11 +336,13 @@ function shutdown() {
   stopping = true;
   log('🛑 A encerrar…');
   setStatus('stopped');
-  if (child) {
-    try {
-      child.kill('SIGTERM');
-    } catch {
-      /* ignore */
+  for (const p of [child, shell]) {
+    if (p) {
+      try {
+        p.kill('SIGTERM');
+      } catch {
+        /* ignore */
+      }
     }
   }
   setTimeout(() => process.exit(0), 500);

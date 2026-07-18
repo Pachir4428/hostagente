@@ -820,7 +820,7 @@ export PAINEL_BOT_ID=${id}`}</pre>
           {/* Terminal */}
           <div className="card flex max-h-[600px] flex-col overflow-hidden">
             <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-              <span className="font-display text-sm font-semibold"><i className="fa-solid fa-terminal mr-2 text-teal" />Terminal</span>
+              <span className="font-display text-sm font-semibold"><i className="fa-solid fa-terminal mr-2 text-teal" />Terminal <span className="ml-1 rounded bg-teal/10 px-1.5 py-0.5 text-[10px] font-normal text-teal">Termux</span></span>
               <button onClick={clearTerminal} className="text-xs text-muted hover:text-ink"><i className="fa-solid fa-eraser mr-1" />limpar</button>
             </div>
             <div ref={logsRef} onScroll={onLogsScroll} className="flex-1 overflow-y-auto bg-[#0b0f14] p-4 font-mono text-[13px] leading-relaxed text-[#c9d1d9]">
@@ -838,7 +838,7 @@ export PAINEL_BOT_ID=${id}`}</pre>
                 value={cmd}
                 onChange={(e) => setCmd(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendCommand()}
-                placeholder="ex: pkg install ffmpeg -y   |   npm install   |   node index.js"
+                placeholder="ex: pkg install ffmpeg -y   |   cd base-bot   |   ls   |   node index.js"
                 spellCheck={false}
                 autoCapitalize="off"
                 autoCorrect="off"
