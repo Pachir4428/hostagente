@@ -130,8 +130,8 @@ export class BotsService {
       baseFiles = require('./bridge-template').bridgeTemplateFiles();
     } else if (data.base === 'vazio') {
       baseFiles = [
-        { name: 'package.json', content: JSON.stringify({ name: 'bot', main: 'index.js', scripts: { start: 'node index.js' }, dependencies: { '@whiskeysockets/baileys': '^6.7.0', 'qrcode-terminal': '^0.12.0' } }, null, 2) },
-        { name: 'index.js', content: `const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');\nconst qrcode = require('qrcode-terminal');\nasync function start(){const {state,saveCreds}=await useMultiFileAuthState('auth');const sock=makeWASocket({auth:state});sock.ev.on('creds.update',saveCreds);sock.ev.on('connection.update',u=>{if(u.qr)qrcode.generate(u.qr,{small:true});});}\nstart();\n` },
+        { name: 'package.json', content: JSON.stringify({ name: 'bot', main: 'index.js', scripts: { start: 'node index.js' }, dependencies: { '@whiskeysockets/baileys': '^6.7.18', 'qrcode-terminal': '^0.12.0' } }, null, 2) },
+        { name: 'index.js', content: `const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, Browsers } = require('@whiskeysockets/baileys');\nconst qrcode = require('qrcode-terminal');\nasync function start(){const {state,saveCreds}=await useMultiFileAuthState('auth');const {version}=await fetchLatestBaileysVersion();const sock=makeWASocket({version,auth:state,printQRInTerminal:false,browser:Browsers.appropriate('Chrome')});sock.ev.on('creds.update',saveCreds);sock.ev.on('connection.update',u=>{if(u.qr)qrcode.generate(u.qr,{small:true});});}\nstart();\n` },
       ];
     } else {
       baseFiles = this.templateFiles();
@@ -567,7 +567,7 @@ export class BotsService {
         main: 'index.js',
         scripts: { start: 'node index.js' },
         dependencies: {
-          '@whiskeysockets/baileys': '^6.7.0',
+          '@whiskeysockets/baileys': '^6.7.18',
           ioredis: '^5.3.2',
           'qrcode-terminal': '^0.12.0',
         },
@@ -578,6 +578,8 @@ export class BotsService {
     const index = `const {
   default: makeWASocket,
   useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  Browsers,
   DisconnectReason,
 } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
@@ -589,7 +591,16 @@ const _BID = process.env.BOT_ID || process.env.PAINEL_BOT_ID || '';
 
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState('auth');
-  const sock = makeWASocket({ auth: state, printQRInTerminal: false });
+  // Usa SEMPRE a versão atual do WhatsApp Web. Sem isto, o servidor recusa a
+  // ligação (erro 405 "Connection Failure") — a causa nº1 de "liga localmente
+  // mas não no servidor".
+  const { version } = await fetchLatestBaileysVersion();
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: false,
+    browser: Browsers.appropriate('Chrome'),
+  });
 
   sock.ev.on('creds.update', saveCreds);
   sock.ev.on('connection.update', (u) => {

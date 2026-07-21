@@ -9,7 +9,7 @@ const PACKAGE_JSON = JSON.stringify(
     main: 'index.js',
     scripts: { start: 'node index.js' },
     dependencies: {
-      '@whiskeysockets/baileys': '^6.7.0',
+      '@whiskeysockets/baileys': '^6.7.18',
       axios: '^1.6.5',
       ioredis: '^5.3.2',
       pino: '^8.17.2',
@@ -42,7 +42,7 @@ const path = require('path');
 const axios = require('axios');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, Browsers, DisconnectReason } = require('@whiskeysockets/baileys');
 
 const API_KEY = process.env.PAINEL_API_KEY || process.env.HOSTAGENTE_KEY || process.env.API_KEY || '';
 const PANEL_URL = process.env.PAINEL_API_URL || process.env.HOSTAGENTE_URL || 'http://api:3000';
@@ -101,7 +101,9 @@ async function handlePayment(sock, jid, text) {
 async function start() {
   if (!API_KEY) { console.error('Sem chave de API. Este bot deve correr dentro do painel HostAgente.'); }
   const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, 'auth_info'));
-  const sock = makeWASocket({ auth: state, printQRInTerminal: false, logger: pino({ level: 'silent' }) });
+  // Versão atual do WhatsApp Web — sem isto o servidor recusa a ligação (405).
+  const { version } = await fetchLatestBaileysVersion();
+  const sock = makeWASocket({ version, auth: state, printQRInTerminal: false, browser: Browsers.appropriate('Chrome'), logger: pino({ level: 'silent' }) });
   sock.ev.on('creds.update', saveCreds);
   sock.ev.on('connection.update', (u) => {
     const { connection, lastDisconnect, qr } = u;

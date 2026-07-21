@@ -111,6 +111,7 @@ try {
     // Interceta o require do Baileys e embrulha o makeWASocket.
     const origLoad = Module._load;
     let hooked = false;
+    let latestVersion = null; // versão atual do WhatsApp Web (best-effort)
     Module._load = function (request, parent, isMain) {
       const m = origLoad.apply(this, arguments);
       try {
@@ -118,8 +119,36 @@ try {
           const key = typeof m.default === 'function' ? 'default' : typeof m.makeWASocket === 'function' ? 'makeWASocket' : null;
           if (key) {
             hooked = true;
+            // Descobre a versão atual do WhatsApp Web assim que o Baileys carrega.
+            // Sem versão atual, o servidor recusa a ligação (405) — causa nº1 de
+            // "liga localmente mas não no servidor". Injetamos se o bot não a definir.
+            try {
+              if (typeof m.fetchLatestBaileysVersion === 'function') {
+                m.fetchLatestBaileysVersion()
+                  .then((r) => {
+                    latestVersion = r && r.version;
+                    if (latestVersion) logLine('📶 WhatsApp Web v' + latestVersion.join('.'));
+                  })
+                  .catch(() => {});
+              }
+            } catch (e) {
+              /* ignore */
+            }
+            const appropriate =
+              m.Browsers && typeof m.Browsers.appropriate === 'function'
+                ? m.Browsers.appropriate('Chrome')
+                : ['HostAgente', 'Chrome', '120.0.0'];
             const original = m[key];
             m[key] = function () {
+              try {
+                const cfg = arguments[0];
+                if (cfg && typeof cfg === 'object') {
+                  if (!cfg.version && latestVersion) cfg.version = latestVersion;
+                  if (!cfg.browser) cfg.browser = appropriate;
+                }
+              } catch (e) {
+                /* ignore */
+              }
               const sock = original.apply(this, arguments);
               try {
                 attach(sock);
